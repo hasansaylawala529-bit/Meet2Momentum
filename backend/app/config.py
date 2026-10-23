@@ -42,4 +42,8 @@ def get_gemini_model() -> str:
 GEMINI_API_KEY = get_gemini_api_key()
 GEMINI_MODEL = get_gemini_model()
 
+# GitHub Project Board Integration Configuration
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN", "").strip()
+GITHUB_REPO = os.getenv("GITHUB_REPO", "hasansaylawala529-bit/Meet2Momentum").strip()
+
 

@@ -506,5 +506,70 @@ export async function updateTaskProgress(taskId, taskStatus, note = null) {
   return await res.json();
 }
 
+/**
+ * Fetch GitHub integration configuration status
+ */
+export async function fetchGitHubConfig() {
+  const res = await fetch(`${API_BASE_URL}/api/integrations/github/config`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+  if (!res.ok) throw new Error('Failed to fetch GitHub integration config.');
+  return await res.json();
+}
 
+/**
+ * Batch dispatch approved commitments to GitHub Issues
+ */
+export async function dispatchGitHubBatch(payload = {}) {
+  const res = await fetch(`${API_BASE_URL}/api/integrations/github/dispatch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
 
+  if (!res.ok) {
+    let errorDetail = 'GitHub batch dispatch failed.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Dispatch single approved commitment to GitHub Issues
+ */
+export async function dispatchSingleGitHub(taskId, payload = {}) {
+  if (!taskId) throw new Error('Task ID is required for GitHub dispatch.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/dispatch-github`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to dispatch to GitHub.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}

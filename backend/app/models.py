@@ -94,6 +94,11 @@ class ActionItem(BaseModel):
     conflict_flag: bool = False
     conflict_note: Optional[str] = None
     evidence_verified: bool = True
+    meeting_date: Optional[str] = None
+    meeting_title: Optional[str] = None
+    external_url: Optional[str] = None
+    integration_service: Optional[str] = None
+    external_id: Optional[str] = None
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
     execution_status: ExecutionStatus = ExecutionStatus.NOT_EXPORTED
     task_status: TaskStatus = TaskStatus.PENDING

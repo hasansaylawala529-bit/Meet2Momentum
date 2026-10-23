@@ -109,6 +109,11 @@ Meet2Momentum enforces a strict boundary between three independent lifecycles:
 5. Click **Dispatch All Ready**:
    * Atomically transitions eligible commitments to `execution_status = "exported"`.
    * Execution badge updates to **`🚀 Exported`** with ISO-8601 UTC timestamp.
+6. Click **Dispatch to GitHub Issues**:
+   * Bridges commitments directly to the project board.
+   * Creates structured issues containing assigned owners, deadlines, and a verbatim **`🛡️ Ground-Truth Evidence`** quote block.
+   * Generates a clickable badge (e.g. **`#104 ↗`**) linking directly to the created issue on GitHub!
+   * Demonstrates how the Commitment Firewall prevents any unapproved proposal from reaching the project board.
 
 ---
 

@@ -21,6 +21,8 @@ import {
   fetchWorkspaceAuditLog,
   fetchTaskHistory,
   updateTaskProgress,
+  dispatchGitHubBatch,
+  dispatchSingleGitHub,
 } from './services/api';
 
 export default function App() {
@@ -348,6 +350,53 @@ export default function App() {
       });
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleDispatchGitHub = async () => {
+    setIsExporting(true);
+    setExportBlockedItems([]);
+    try {
+      const result = await dispatchGitHubBatch();
+      await Promise.all([loadOutcomesData(), loadExportSummaryData()]);
+      if (result.blocked_items && result.blocked_items.length > 0) {
+        setExportBlockedItems(result.blocked_items);
+        setGlobalNotice({
+          type: 'success',
+          message: `Dispatched ${result.dispatched_count} commitments to GitHub Issues (${result.target_repo}). ${result.blocked_items.length} unapproved items were safely blocked by Commitment Firewall.`,
+        });
+      } else {
+        setGlobalNotice({
+          type: 'success',
+          message: `Successfully created ${result.dispatched_count} GitHub Issues on ${result.target_repo}!`,
+        });
+      }
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `GitHub dispatch failed: ${err.message}`,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSingleGitHubDispatch = async (taskId) => {
+    setActionLoadingId(taskId);
+    try {
+      const updated = await dispatchSingleGitHub(taskId);
+      await Promise.all([loadOutcomesData(), loadExportSummaryData()]);
+      setGlobalNotice({
+        type: 'success',
+        message: `Commitment #${taskId} dispatched to GitHub Issues: ${updated.external_url || 'Created'}`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Failed to dispatch to GitHub: ${err.message}`,
+      });
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -1894,8 +1943,22 @@ export default function App() {
                       <span>
                         {isExporting 
                           ? 'Dispatching...' 
-                          : `Dispatch All Ready (${exportSummary?.pending_export_count || 0})`}
+                          : `Dispatch All (${exportSummary?.pending_export_count || 0})`}
                       </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-sm"
+                      style={{ background: '#24292e', color: '#ffffff', border: '1px solid #1b1f23', display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+                      onClick={handleDispatchGitHub}
+                      disabled={isExporting || (exportSummary?.pending_export_count || 0) === 0}
+                      title="Create GitHub Issues for all approved commitments with verbatim evidence quotes"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                      </svg>
+                      <span>Dispatch to GitHub Issues</span>
                     </button>
                   </div>
                 </div>
@@ -2033,19 +2096,54 @@ export default function App() {
 
                                   <td>
                                     {isExported ? (
-                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                                        {item.exported_at ? new Date(item.exported_at).toLocaleDateString() : 'Done'}
-                                      </span>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
+                                        {item.external_url ? (
+                                          <a
+                                            href={item.external_url}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            style={{
+                                              textDecoration: 'none',
+                                              display: 'inline-flex',
+                                              alignItems: 'center',
+                                              gap: '3px',
+                                              padding: '0.2rem 0.45rem',
+                                              borderRadius: '4px',
+                                              background: '#24292e',
+                                              color: '#fff',
+                                              fontSize: '0.7rem',
+                                              fontWeight: 600,
+                                            }}
+                                            title="View created issue on GitHub"
+                                          >
+                                            <span>{item.external_id || 'GitHub'} ↗</span>
+                                          </a>
+                                        ) : (
+                                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Exported</span>
+                                        )}
+                                      </div>
                                     ) : isApproved ? (
-                                      <button
-                                        type="button"
-                                        className="btn-export-action"
-                                        onClick={() => handleExportSingleItem(item.task_id)}
-                                        disabled={actionLoadingId === item.task_id}
-                                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
-                                      >
-                                        <span>{actionLoadingId === item.task_id ? '...' : 'Export'}</span>
-                                      </button>
+                                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                        <button
+                                          type="button"
+                                          className="btn-export-action"
+                                          onClick={() => handleExportSingleItem(item.task_id)}
+                                          disabled={actionLoadingId === item.task_id}
+                                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem' }}
+                                        >
+                                          <span>{actionLoadingId === item.task_id ? '...' : 'Export'}</span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btn-export-action"
+                                          onClick={() => handleSingleGitHubDispatch(item.task_id)}
+                                          disabled={actionLoadingId === item.task_id}
+                                          style={{ padding: '0.25rem 0.5rem', fontSize: '0.72rem', background: '#24292e', color: '#fff' }}
+                                          title="Dispatch to GitHub Issues"
+                                        >
+                                          <span>{actionLoadingId === item.task_id ? '...' : 'GitHub'}</span>
+                                        </button>
+                                      </div>
                                     ) : (
                                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                                         Approve First

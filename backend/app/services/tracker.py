@@ -120,6 +120,8 @@ def evaluate_task_schedule(
 ) -> Tuple[bool, str, Optional[int]]:
     """
     Evaluate whether a task is overdue, due soon, on track, or completed.
+    Anchors relative deadlines to the meeting's date when available, then
+    compares the parsed target date against current reference time.
     Returns: (is_overdue: bool, schedule_status: str, days_delta: Optional[int])
     """
     status = item.get("task_status", "pending")
@@ -131,7 +133,16 @@ def evaluate_task_schedule(
         return False, "unspecified", None
 
     ref = ref_datetime or datetime.now(timezone.utc)
-    parsed_date = parse_due_date(due_str, ref_datetime=ref)
+
+    # Resolve anchor datetime from meeting_date if available
+    anchor_datetime = None
+    meeting_date_val = item.get("meeting_date")
+    if meeting_date_val:
+        anchor_datetime = parse_due_date(meeting_date_val, ref_datetime=None)
+
+    # Parse target deadline anchored to meeting date (fallback to ref)
+    parse_anchor = anchor_datetime or ref
+    parsed_date = parse_due_date(due_str, ref_datetime=parse_anchor)
 
     if not parsed_date:
         return False, "unspecified", None

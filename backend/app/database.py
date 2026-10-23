@@ -43,6 +43,12 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE action_items ADD COLUMN conflict_note TEXT;")
     if "duplicate_note" not in action_cols:
         cursor.execute("ALTER TABLE action_items ADD COLUMN duplicate_note TEXT;")
+    if "external_url" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN external_url TEXT;")
+    if "integration_service" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN integration_service TEXT;")
+    if "external_id" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN external_id TEXT;")
 
 
 def init_db(db_path: Optional[str] = None) -> None:
@@ -100,6 +106,9 @@ def init_db(db_path: Optional[str] = None) -> None:
                     task_status TEXT NOT NULL DEFAULT 'pending',
                     exported_at TEXT,
                     completed_at TEXT,
+                    external_url TEXT,
+                    integration_service TEXT,
+                    external_id TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (meeting_id) REFERENCES meetings (meeting_id) ON DELETE CASCADE
                 );
@@ -305,18 +314,23 @@ def list_action_items(
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
-        query = "SELECT * FROM action_items WHERE 1=1"
+        query = """
+            SELECT a.*, m.meeting_date, m.title as meeting_title 
+            FROM action_items a 
+            LEFT JOIN meetings m ON a.meeting_id = m.meeting_id 
+            WHERE 1=1
+        """
         params = []
         if meeting_id:
-            query += " AND meeting_id = ?"
+            query += " AND a.meeting_id = ?"
             params.append(meeting_id)
         if category:
-            query += " AND category = ?"
+            query += " AND a.category = ?"
             params.append(category)
         if approval_status:
-            query += " AND approval_status = ?"
+            query += " AND a.approval_status = ?"
             params.append(approval_status)
-        query += " ORDER BY created_at DESC"
+        query += " ORDER BY a.created_at DESC"
         
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
@@ -337,7 +351,12 @@ def get_action_item(task_id: str, db_path: Optional[str] = None) -> Optional[Dic
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM action_items WHERE task_id = ?", (task_id,))
+        cursor.execute("""
+            SELECT a.*, m.meeting_date, m.title as meeting_title 
+            FROM action_items a 
+            LEFT JOIN meetings m ON a.meeting_id = m.meeting_id 
+            WHERE a.task_id = ?
+        """, (task_id,))
         row = cursor.fetchone()
         if not row:
             return None
@@ -383,6 +402,9 @@ def update_action_item(
         "task_status",
         "exported_at",
         "completed_at",
+        "external_url",
+        "integration_service",
+        "external_id",
     }
 
     set_clauses = []
