@@ -119,10 +119,11 @@ def test_format_github_issue_payload():
     assert "[COMMITMENT]" in payload["title"]
     assert "Sarah will configure staging database by Oct 30." in payload["body"]
     assert "**Assigned Owner:** Sarah Chen" in payload["body"]
-    # Transcripts contain human names, not GitHub handles: assignees must NOT be set
+    assert "## Summary" in payload["body"]
+    assert "## Transcript Evidence" in payload["body"]
     assert "assignees" not in payload
     assert "@Sarah" not in payload["body"]
-    assert "approved-by-firewall" in payload["labels"]
+    assert "commitment" in payload["labels"]
 
 
 def test_github_dispatch_blocks_when_server_token_missing(client, temp_db, monkeypatch):

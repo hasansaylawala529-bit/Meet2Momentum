@@ -8,52 +8,94 @@ from app.database import get_action_item, update_action_item, list_action_items,
 from app.services.firewall import evaluate_commitment_firewall, FirewallValidationError, ItemNotFoundError
 
 
-def format_github_issue(item: Dict[str, Any]) -> Dict[str, Any]:
+import re
+
+def resolve_assignee_candidate(owner: Optional[str], repo: str) -> Optional[str]:
     """
-    Format action item into structured GitHub Issue payload with verbatim evidence citation.
-    Transcripts contain human names (e.g. 'Sarah Chen'), not GitHub handles.
-    Owner is included in the markdown body without '@' mention, and assignees is omitted.
+    Deterministically resolve transcript owner name to an eligible GitHub username.
+    - If the owner matches or contains the repo owner (e.g. 'Hasan Saylawala' vs 'hasansaylawala529-bit'), map to repo owner.
+    - If owner is a single-word handle matching GitHub username rules, attempt direct assignment.
+    """
+    if not owner or not owner.strip():
+        return None
+
+    clean_owner = owner.strip()
+    repo_parts = repo.split("/")
+    repo_owner = repo_parts[0].strip() if repo_parts else ""
+
+    # Match against repo owner (e.g. 'Hasan' in 'hasansaylawala529-bit')
+    if repo_owner:
+        first_name = clean_owner.split()[0].lower()
+        if len(first_name) >= 3 and (first_name in repo_owner.lower() or repo_owner.lower() in clean_owner.lower()):
+            return repo_owner
+
+    # If already a valid GitHub username format (no spaces, alphanumeric/hyphens)
+    if re.match(r"^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$", clean_owner):
+        return clean_owner
+
+    return None
+
+
+def format_github_issue(item: Dict[str, Any], repo: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Format action item into a clean, professional GitHub Issue.
+    Eliminates emoji spam, cheesy badges, and AI boilerplate.
+    Formats clearly for engineering teams: Summary, Assignment Details, Verbatim Transcript Reference.
     """
     cat = item.get("category", "commitment").upper()
     title = f"[{cat}] {item.get('title', 'Action Item')}"
 
     owner = item.get("owner")
-    due_date = item.get("due_date")
+    due_date = item.get("due_date") or "Not specified"
     meeting_title = item.get("meeting_title") or "Meeting Session"
     meeting_date = item.get("meeting_date") or "Unspecified"
-    source_quote = item.get("source_text") or "Grounded from transcript discussion"
-    description = item.get("description") or "No additional description provided."
+    source_quote = (item.get("source_text") or "").strip()
+    description = (item.get("description") or "").strip()
 
-    body = f"""### 🎯 Action Item Overview
-- **Category:** `{item.get('category')}`
-- **Assigned Owner:** {owner if owner else '*Unassigned*'}
-- **Target Deadline:** {due_date if due_date else '*Unspecified*'}
-- **Meeting Context:** {meeting_title} ({meeting_date})
+    body_sections = []
 
-### 📝 Description
-{description}
+    # Section 1: Clean summary
+    if description and description.strip().lower() != (item.get("title") or "").strip().lower():
+        body_sections.append(f"## Summary\n{description}")
+    else:
+        body_sections.append(f"## Summary\n{item.get('title', 'Action item extracted from meeting discussion.')}")
 
----
+    # Section 2: Clear details
+    body_sections.append(
+        f"## Details\n"
+        f"- **Assigned Owner:** {owner if owner else 'Unassigned'}\n"
+        f"- **Target Deadline:** {due_date}\n"
+        f"- **Meeting Reference:** {meeting_title} ({meeting_date})"
+    )
 
-### 🛡️ Ground-Truth Evidence (Grounded in Transcript)
-> "{source_quote}"
+    # Section 3: Verbatim transcript evidence
+    if source_quote:
+        body_sections.append(f"## Transcript Evidence\n> \"{source_quote}\"")
 
----
+    # Section 4: Minimal reference footer
+    body_sections.append(f"---\n*Dispatched from Meet2Momentum (`{item.get('task_id')}`)*")
 
-*Dispatched under **Meet2Momentum Commitment Firewall** governance.*  
-*Task ID: `{item.get('task_id')}` | Meeting ID: `{item.get('meeting_id')}`*
-"""
-    labels = ["commitment", "meet2momentum", "approved-by-firewall"]
+    body = "\n\n".join(body_sections)
+
+    labels = ["task", "commitment"]
     if item.get("category") == "suggestion":
-        labels = ["suggestion", "meet2momentum", "approved-by-firewall"]
+        labels = ["suggestion"]
     elif item.get("category") == "unresolved_question":
-        labels = ["unresolved-question", "meet2momentum", "approved-by-firewall"]
+        labels = ["question", "clarification-needed"]
 
-    return {
+    payload: Dict[str, Any] = {
         "title": title,
         "body": body,
         "labels": labels,
     }
+
+    # Resolve assignee candidate if repo is specified
+    if repo and owner:
+        candidate = resolve_assignee_candidate(owner, repo)
+        if candidate:
+            payload["assignees"] = [candidate]
+
+    return payload
 
 
 def create_github_issue(
@@ -66,6 +108,7 @@ def create_github_issue(
     Dispatch a single approved commitment to GitHub Issues, strictly gated by the Commitment Firewall.
     The GitHub token MUST come from the server environment (GITHUB_TOKEN).
     Dispatches directly to the real GitHub REST API. Fake / simulated URLs are strictly prohibited.
+    Gracefully handles assignees: if user is not a collaborator, retries cleanly without failing.
     """
     # 1. Commitment Firewall Enforcement Gate
     eval_result = evaluate_commitment_firewall(task_id, db_path=db_path)
@@ -97,7 +140,7 @@ def create_github_issue(
             status_code=400
         )
 
-    issue_payload = format_github_issue(item)
+    issue_payload = format_github_issue(item, repo=target_repo)
     now_iso = datetime.now(timezone.utc).isoformat()
     old_execution = item.get("execution_status", "not_exported")
 
@@ -112,6 +155,14 @@ def create_github_issue(
     try:
         with httpx.Client(timeout=15.0) as client:
             res = client.post(api_url, json=issue_payload, headers=headers)
+
+            # Real-world resilience: if GitHub rejects assignees because user is not a repo collaborator,
+            # retry without assignees so issue creation succeeds with owner noted in body
+            if res.status_code == 422 and "assignees" in issue_payload:
+                payload_fallback = dict(issue_payload)
+                payload_fallback.pop("assignees", None)
+                res = client.post(api_url, json=payload_fallback, headers=headers)
+
             if res.status_code in (200, 201):
                 res_data = res.json()
                 issue_url = res_data.get("html_url")
