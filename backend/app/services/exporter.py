@@ -35,7 +35,8 @@ def build_export_records(
 ) -> List[ExportRecord]:
     """
     Construct fully enriched export records for commitments and action items.
-    Enforces Commitment Firewall: if only_eligible=True, strictly excludes blocked items.
+    Enforces Commitment Firewall unconditionally: unapproved (pending) and rejected
+    items are strictly excluded from downstream exports, regardless of client query parameters.
     """
     path = db_path or DATABASE_PATH
     meetings = list_meetings(db_path=path)
@@ -48,8 +49,8 @@ def build_export_records(
         # Evaluate firewall eligibility server-side
         firewall_res = evaluate_commitment_firewall(item, db_path=path)
 
-        # Enforce Commitment Firewall gate
-        if only_eligible and not firewall_res.eligible:
+        # Enforce Commitment Firewall unconditionally: unapproved and rejected items are strictly excluded
+        if not firewall_res.eligible:
             continue
 
         meeting_info = meeting_map.get(item["meeting_id"], {})

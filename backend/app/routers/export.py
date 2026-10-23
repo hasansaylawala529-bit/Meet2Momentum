@@ -1,4 +1,5 @@
 from typing import Optional
+# pyrefly: ignore[missing-import]
 from fastapi import APIRouter, HTTPException, Query, Response
 
 from app.models import (
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/api/export", tags=["Export & Execution"])
 )
 def export_csv_endpoint(
     meeting_id: Optional[str] = Query(None, description="Optional meeting ID filter"),
-    only_eligible: bool = Query(True, description="Strictly enforce Commitment Firewall (exclude unapproved/blocked items)"),
+    only_eligible: bool = Query(True, description="Enforces Commitment Firewall (unapproved and rejected items are strictly excluded by server-side policy)"),
 ):
     try:
         records = build_export_records(meeting_id=meeting_id, only_eligible=only_eligible)
@@ -55,7 +56,7 @@ def export_csv_endpoint(
 )
 def export_json_endpoint(
     meeting_id: Optional[str] = Query(None, description="Optional meeting ID filter"),
-    only_eligible: bool = Query(True, description="Strictly enforce Commitment Firewall"),
+    only_eligible: bool = Query(True, description="Enforces Commitment Firewall (unapproved and rejected items are strictly excluded by server-side policy)"),
 ):
     try:
         records = build_export_records(meeting_id=meeting_id, only_eligible=only_eligible)

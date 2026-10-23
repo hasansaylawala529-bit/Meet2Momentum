@@ -7,11 +7,13 @@ from app.models import (
     TaskHistoryEntry,
     TrackingDashboardResponse,
 )
-from app.database import get_task_history, list_all_history, get_action_item, update_action_item_progress
+from app.database import get_task_history, list_all_history, get_action_item
 from app.services.tracker import (
     get_tracking_dashboard_service,
     enrich_action_item_schedule,
+    update_task_progress_service,
 )
+from app.services.firewall import FirewallValidationError, ItemNotFoundError
 
 tracking_router = APIRouter(prefix="/api/tracking", tags=["Tracking & Accountability"])
 action_tracking_router = APIRouter(prefix="/api/action-items", tags=["Action Items Progress & History"])
@@ -71,14 +73,28 @@ def get_task_audit_history(task_id: str):
     "/{task_id}/status",
     response_model=ActionItem,
     summary="Update task execution progress status",
-    description="Updates task_status (pending, in_progress, completed) and logs the transition in the audit history."
+    description="Updates task_status (pending, in_progress, completed) and logs the transition in the audit history, strictly enforced by the Commitment Firewall."
 )
 def update_task_status_endpoint(task_id: str, payload: TaskStatusUpdateRequest):
-    target_status = payload.task_status.value
-    updated = update_action_item_progress(task_id, target_status, note=payload.note)
-    if not updated:
+    try:
+        updated = update_task_progress_service(
+            task_id=task_id,
+            target_status=payload.task_status.value,
+            note=payload.note
+        )
+        return ActionItem(**enrich_action_item_schedule(updated))
+    except ItemNotFoundError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Action item with ID '{task_id}' not found."
+            detail=str(e)
         )
-    return ActionItem(**enrich_action_item_schedule(updated))
+    except FirewallValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update task progress: {str(e)}"
+        )

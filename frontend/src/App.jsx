@@ -1234,6 +1234,20 @@ export default function App() {
                                     📅 On Track
                                   </span>
                                 ) : null}
+
+                                {/* Phase 6.2: Duplicate Candidate Badge */}
+                                {(item.duplicate_of || item.duplicate_note) && (
+                                  <span className="badge-detection duplicate" title={item.duplicate_note || 'Potential duplicate item'}>
+                                    📑 Potential Duplicate
+                                  </span>
+                                )}
+
+                                {/* Phase 6.2: Conflict Candidate Badge */}
+                                {item.conflict_flag && (
+                                  <span className="badge-detection conflict" title={item.conflict_note || 'Possible conflicting commitment'}>
+                                    ⚡ Possible Conflict
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -1378,6 +1392,33 @@ export default function App() {
                                     </svg>
                                     <div>
                                       <strong>Clarification Needed:</strong> {item.clarification_note || 'Missing assigned owner or explicit deadline requires human confirmation.'}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Phase 6.2: Conflict Warning Banner */}
+                                {item.conflict_flag && (
+                                  <div className="conflict-warning-banner">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+                                      <line x1="12" y1="9" x2="12" y2="13" />
+                                      <line x1="12" y1="17" x2="12.01" y2="17" />
+                                    </svg>
+                                    <div>
+                                      <strong>Possible Conflict:</strong> {item.conflict_note || 'This commitment conflicts in owner, deadline, or outcome with another recorded item.'}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Phase 6.2: Duplicate Candidate Warning Banner */}
+                                {(item.duplicate_of || item.duplicate_note) && (
+                                  <div className="duplicate-warning-banner">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                                    </svg>
+                                    <div>
+                                      <strong>Potential Duplicate:</strong> {item.duplicate_note || `Similar to item #${item.duplicate_of}. Review before approval.`}
                                     </div>
                                   </div>
                                 )}

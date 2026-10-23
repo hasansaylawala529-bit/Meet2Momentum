@@ -267,8 +267,11 @@ def test_task_audit_history_endpoint(client, temp_db):
     # 2. Approve the item
     client.post(f"/api/action-items/{task_id}/approve", json={"note": "Approved for dev team"})
 
-    # 3. Edit owner
+    # 3. Edit owner (material edit resets approval to pending per Phase 3 rules)
     client.patch(f"/api/action-items/{task_id}", json={"owner": "Elena Rostova"})
+
+    # 3b. Re-approve item so it is eligible for execution status transitions (Phase 6.1 Commitment Firewall)
+    client.post(f"/api/action-items/{task_id}/approve", json={"note": "Re-approved after owner update"})
 
     # 4. Update status
     client.patch(f"/api/action-items/{task_id}/status", json={"task_status": "in_progress"})

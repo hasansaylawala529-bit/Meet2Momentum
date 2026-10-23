@@ -39,6 +39,10 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE action_items ADD COLUMN exported_at TEXT;")
     if "completed_at" not in action_cols:
         cursor.execute("ALTER TABLE action_items ADD COLUMN completed_at TEXT;")
+    if "conflict_note" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN conflict_note TEXT;")
+    if "duplicate_note" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN duplicate_note TEXT;")
 
 
 def init_db(db_path: Optional[str] = None) -> None:
@@ -87,7 +91,9 @@ def init_db(db_path: Optional[str] = None) -> None:
                     clarification_required INTEGER NOT NULL DEFAULT 0,
                     clarification_note TEXT,
                     duplicate_of TEXT,
+                    duplicate_note TEXT,
                     conflict_flag INTEGER NOT NULL DEFAULT 0,
+                    conflict_note TEXT,
                     evidence_verified INTEGER NOT NULL DEFAULT 1,
                     approval_status TEXT NOT NULL DEFAULT 'pending',
                     execution_status TEXT NOT NULL DEFAULT 'not_exported',
@@ -181,7 +187,11 @@ def save_extraction_results(
     conn = get_db_connection(db_path)
     try:
         with conn:
-            # 1. Clear previous extracted records for this meeting
+            # 1. Clear previous extracted records for this meeting and clean dangling duplicate references
+            conn.execute(
+                "UPDATE action_items SET duplicate_of = NULL WHERE duplicate_of IN (SELECT task_id FROM action_items WHERE meeting_id = ?)",
+                (meeting_id,)
+            )
             conn.execute("DELETE FROM decisions WHERE meeting_id = ?", (meeting_id,))
             conn.execute("DELETE FROM action_items WHERE meeting_id = ?", (meeting_id,))
 
@@ -216,9 +226,9 @@ def save_extraction_results(
                         task_id, meeting_id, title, description, category,
                         commitment_status, owner, due_date, source_text,
                         clarification_required, clarification_note, duplicate_of,
-                        conflict_flag, evidence_verified, approval_status,
-                        execution_status, task_status, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        duplicate_note, conflict_flag, conflict_note, evidence_verified,
+                        approval_status, execution_status, task_status, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         a["task_id"],
@@ -233,7 +243,9 @@ def save_extraction_results(
                         1 if a.get("clarification_required", False) else 0,
                         a.get("clarification_note"),
                         a.get("duplicate_of"),
+                        a.get("duplicate_note"),
                         1 if a.get("conflict_flag", False) else 0,
+                        a.get("conflict_note"),
                         1 if a.get("evidence_verified", True) else 0,
                         a.get("approval_status", "pending"),
                         a.get("execution_status", "not_exported"),
@@ -362,7 +374,9 @@ def update_action_item(
         "clarification_required",
         "clarification_note",
         "duplicate_of",
+        "duplicate_note",
         "conflict_flag",
+        "conflict_note",
         "evidence_verified",
         "approval_status",
         "execution_status",

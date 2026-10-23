@@ -23,6 +23,7 @@ from app.models import (
     TaskStatus,
 )
 from app.database import save_extraction_results
+from app.services.detector import detect_duplicates_and_conflicts
 
 
 def _normalize_whitespace(text: str) -> str:
@@ -231,7 +232,9 @@ Ensure every item includes exact verbatim source_text from the transcript.
             "clarification_required": clarification_req,
             "clarification_note": clarification_note.strip() if clarification_note else None,
             "duplicate_of": None,
+            "duplicate_note": None,
             "conflict_flag": False,
+            "conflict_note": None,
             "evidence_verified": evidence_ok,
             "approval_status": ApprovalStatus.PENDING.value,
             "execution_status": ExecutionStatus.NOT_EXPORTED.value,
@@ -239,6 +242,13 @@ Ensure every item includes exact verbatim source_text from the transcript.
             "created_at": extracted_at,
         }
         processed_actions.append(action_dict)
+
+    # Detect duplicate candidates and potential conflicts deterministically
+    processed_actions = detect_duplicates_and_conflicts(
+        processed_actions,
+        meeting_id=meeting_id,
+        db_path=db_path
+    )
 
     # Persist extraction results transactionally to SQLite
     save_extraction_results(

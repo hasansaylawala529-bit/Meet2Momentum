@@ -21,6 +21,19 @@ Vikram agreed to benchmark database query response times by Monday.
 Neha proposed exploring Redis for caching if query times exceed 100ms.
 Question remaining: Do we need multi-tenant database support for Phase 1?
 Decision confirmed: Single database with strict foreign keys.`
+  },
+  {
+    title: "Sprint Alignment & Pipeline Review",
+    date: "2026-10-25",
+    transcript: `Sprint Alignment Meeting: October 25
+Discussion on Q4 deliverables and pipeline tasks:
+
+Riya agreed to configure the authentication service for staging by Wednesday 5pm.
+Aman stated he will configure the authentication service for staging by Wednesday 5pm.
+Vikram confirmed he will configure the authentication service for staging by Friday.
+Riya agreed to configure the authentication service for staging by Wednesday 5pm.
+Follow up with the infrastructure team next week.
+Someone needs to update the staging SSL certificates.`
   }
 ];
 

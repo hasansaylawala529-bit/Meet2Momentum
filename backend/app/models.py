@@ -90,7 +90,9 @@ class ActionItem(BaseModel):
     clarification_required: bool = False
     clarification_note: Optional[str] = None
     duplicate_of: Optional[str] = None
+    duplicate_note: Optional[str] = None
     conflict_flag: bool = False
+    conflict_note: Optional[str] = None
     evidence_verified: bool = True
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
     execution_status: ExecutionStatus = ExecutionStatus.NOT_EXPORTED

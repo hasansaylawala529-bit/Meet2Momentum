@@ -13,8 +13,14 @@ from app.database import (
 from app.models import (
     ActionItem,
     TaskStatus,
+    ApprovalStatus,
     TaskHistoryEntry,
     TrackingDashboardResponse,
+)
+from app.services.firewall import (
+    evaluate_commitment_firewall,
+    FirewallValidationError,
+    ItemNotFoundError,
 )
 
 
@@ -241,3 +247,54 @@ def get_tracking_dashboard_service(
         unassigned_items=unassigned_items,
         recent_history=recent_history,
     )
+
+
+def update_task_progress_service(
+    task_id: str,
+    target_status: str,
+    note: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Update task execution progress status with strict Commitment Firewall enforcement.
+    Ensures:
+    1. Action item exists, otherwise raises ItemNotFoundError (404).
+    2. A rejected item can never undergo execution progress updates (400).
+    3. A pending or rejected item cannot transition to 'in_progress' or 'completed' (400).
+    4. Only approved items can enter operational execution ('in_progress' or 'completed').
+    5. Valid transitions for eligible approved commitments are preserved.
+    6. Does not modify status or record history when transition is blocked.
+    """
+    path = db_path or DATABASE_PATH
+    item = get_action_item(task_id, db_path=path)
+    if not item:
+        raise ItemNotFoundError(task_id)
+
+    # 1. Commitment Firewall check: rejected items can never undergo execution progress updates
+    current_approval = item.get("approval_status", ApprovalStatus.PENDING.value)
+    if current_approval == ApprovalStatus.REJECTED.value:
+        raise FirewallValidationError(
+            f"Commitment Firewall blocked status transition for item '{task_id}'. "
+            f"Item was rejected by a human reviewer and cannot undergo execution progress updates.",
+            status_code=400
+        )
+
+    # 2. Commitment Firewall check: pending or rejected items cannot transition to in_progress or completed
+    if target_status in (TaskStatus.IN_PROGRESS.value, TaskStatus.COMPLETED.value):
+        firewall_res = evaluate_commitment_firewall(item, db_path=path)
+        if not firewall_res.eligible:
+            block_reason = firewall_res.block_reason or "firewall_blocked"
+            reasons_text = "; ".join(firewall_res.reasons) if firewall_res.reasons else "Item is not eligible for execution."
+            raise FirewallValidationError(
+                f"Commitment Firewall blocked status transition for item '{task_id}'. "
+                f"Cannot transition unapproved item to '{target_status}'. "
+                f"Block reason: {block_reason} ({reasons_text})",
+                status_code=400
+            )
+
+    updated = update_action_item_progress(task_id, target_status, note=note, db_path=path)
+    if not updated:
+        raise ItemNotFoundError(task_id)
+
+    return updated
+

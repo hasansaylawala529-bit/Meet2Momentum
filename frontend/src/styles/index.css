@@ -1659,6 +1659,71 @@ html, body {
   margin-bottom: 0.85rem;
 }
 
+/* Phase 6.2: Duplicate & Conflict Review Indicators */
+.badge-detection.duplicate {
+  background-color: var(--bg-pale-lavender);
+  color: var(--color-lavender);
+  border: 1px solid var(--border-lavender);
+  font-weight: 600;
+  font-size: 0.725rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.badge-detection.conflict {
+  background-color: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FDBA74;
+  font-weight: 600;
+  font-size: 0.725rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.duplicate-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem 0.9rem;
+  background-color: var(--bg-pale-lavender);
+  border: 1px solid var(--border-lavender);
+  border-radius: var(--radius-sm);
+  color: var(--color-lavender);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin-bottom: 0.85rem;
+}
+
+.duplicate-warning-banner svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.conflict-warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  padding: 0.65rem 0.9rem;
+  background-color: #FFF7ED;
+  border: 1px solid #FDBA74;
+  border-radius: var(--radius-sm);
+  color: #C2410C;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin-bottom: 0.85rem;
+}
+
+.conflict-warning-banner svg {
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
 /* Evidence Excerpt Box */
 .evidence-quote-box {
   background-color: #F8FAFC;

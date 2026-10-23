@@ -9,6 +9,7 @@ from app.models import (
     FirewallEvaluationResult,
 )
 from app.database import get_action_item, update_action_item, log_task_history
+from app.services.detector import detect_duplicates_and_conflicts
 
 
 class FirewallValidationError(Exception):
@@ -198,6 +199,19 @@ def edit_action_item(
     updated = update_action_item(task_id, fields_to_update, db_path=db_path)
     if not updated:
         raise ItemNotFoundError(task_id)
+
+    if material_change and updated:
+        # Re-evaluate duplicate and conflict flags after material edit
+        re_evaluated = detect_duplicates_and_conflicts([updated], meeting_id=updated.get("meeting_id"), db_path=db_path)
+        if re_evaluated:
+            eval_item = re_evaluated[0]
+            detection_updates = {
+                "duplicate_of": eval_item.get("duplicate_of"),
+                "duplicate_note": eval_item.get("duplicate_note"),
+                "conflict_flag": eval_item.get("conflict_flag", False),
+                "conflict_note": eval_item.get("conflict_note"),
+            }
+            updated = update_action_item(task_id, detection_updates, db_path=db_path) or updated
 
     if fields_to_update:
         mod_fields = list(fields_to_update.keys())
