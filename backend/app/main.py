@@ -1,0 +1,43 @@
+from contextlib import asynccontextmanager
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from app.config import FRONTEND_ORIGINS
+from app.database import init_db
+from app.routers.meetings import router as meetings_router
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize SQLite tables on startup
+    init_db()
+    yield
+
+
+app = FastAPI(
+    title="Meet2Momentum API",
+    description="Meeting-to-Execution Automation Agent Backend",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Narrow CORS configuration for authorized frontend origins
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=FRONTEND_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+# Include Routers
+app.include_router(meetings_router)
+
+
+@app.get("/api/health")
+def health_check():
+    """Health check endpoint to verify backend service availability."""
+    return {
+        "status": "healthy",
+        "service": "Meet2Momentum API",
+        "version": "1.0.0"
+    }

@@ -1,0 +1,7 @@
+Project meeting: October 23
+
+Riya will complete the login page by October 25.
+Aman will finish API integration by October 27.
+We should consider adding dark mode next week.
+We still need to decide who will test the application.
+Riya will complete the login page by October 25.
