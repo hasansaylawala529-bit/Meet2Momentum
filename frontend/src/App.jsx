@@ -9,6 +9,9 @@ import {
   fetchDecisions,
   fetchActionItems,
   extractMeetingOutcomes,
+  approveActionItem,
+  rejectActionItem,
+  updateActionItem,
 } from './services/api';
 
 export default function App() {
@@ -32,6 +35,16 @@ export default function App() {
   const [extractionErrors, setExtractionErrors] = useState({});
   const [globalNotice, setGlobalNotice] = useState(null);
   const [activeActionCategory, setActiveActionCategory] = useState('all');
+  const [actionApprovalFilter, setActionApprovalFilter] = useState('all');
+  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [editFormData, setEditFormData] = useState({
+    title: '',
+    description: '',
+    owner: '',
+    due_date: '',
+  });
+  const [confirmRejectTaskId, setConfirmRejectTaskId] = useState(null);
+  const [actionLoadingId, setActionLoadingId] = useState(null);
 
   // Fast meeting lookup map
   const meetingMap = useMemo(() => {
@@ -142,15 +155,136 @@ export default function App() {
     }
   };
 
-  // Filtered Action Items
-  const filteredActionItems = useMemo(() => {
-    if (activeActionCategory === 'all') return actionItems;
-    return actionItems.filter((i) => i.category === activeActionCategory);
-  }, [actionItems, activeActionCategory]);
+  // Phase 3: Human Approval and Action Item Editing Handlers
+  const handleApproveItem = async (taskId) => {
+    setActionLoadingId(taskId);
+    try {
+      const updated = await approveActionItem(taskId);
+      setActionItems((prev) =>
+        prev.map((item) => (item.task_id === taskId ? updated : item))
+      );
+      setGlobalNotice({
+        type: 'success',
+        message: `Action item approved. Commitment Firewall: Eligible for execution.`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Approval failed: ${err.message}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
 
-  // Derived counts for overview metrics
+  const handleRejectItem = async (taskId) => {
+    setActionLoadingId(taskId);
+    setConfirmRejectTaskId(null);
+    try {
+      const updated = await rejectActionItem(taskId);
+      setActionItems((prev) =>
+        prev.map((item) => (item.task_id === taskId ? updated : item))
+      );
+      setGlobalNotice({
+        type: 'success',
+        message: `Action item rejected. Commitment Firewall: Blocked from execution.`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Rejection failed: ${err.message}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleStartEdit = (item) => {
+    setEditingTaskId(item.task_id);
+    setEditFormData({
+      title: item.title || '',
+      description: item.description || '',
+      owner: item.owner || '',
+      due_date: item.due_date || '',
+    });
+    setConfirmRejectTaskId(null);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingTaskId(null);
+    setEditFormData({
+      title: '',
+      description: '',
+      owner: '',
+      due_date: '',
+    });
+  };
+
+  const handleSaveEdit = async (taskId) => {
+    if (!editFormData.title.trim()) {
+      setGlobalNotice({
+        type: 'error',
+        message: 'Action item title cannot be empty.',
+      });
+      return;
+    }
+
+    setActionLoadingId(taskId);
+    try {
+      const updated = await updateActionItem(taskId, editFormData);
+      setActionItems((prev) =>
+        prev.map((item) => (item.task_id === taskId ? updated : item))
+      );
+      setEditingTaskId(null);
+      const isResetToPending = updated.approval_status === 'pending';
+      setGlobalNotice({
+        type: 'success',
+        message: isResetToPending
+          ? `Changes saved. Material edits reset item back to Pending Review for human re-approval.`
+          : `Action item updated successfully.`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Failed to update action item: ${err.message}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  // Filtered Action Items by Category AND Approval Status
+  const filteredActionItems = useMemo(() => {
+    return actionItems.filter((i) => {
+      const matchesCategory =
+        activeActionCategory === 'all' || i.category === activeActionCategory;
+      const matchesApproval =
+        actionApprovalFilter === 'all' || i.approval_status === actionApprovalFilter;
+      return matchesCategory && matchesApproval;
+    });
+  }, [actionItems, activeActionCategory, actionApprovalFilter]);
+
+  // Derived counts for overview metrics & filters
   const confirmedCommitmentsCount = useMemo(() => {
     return actionItems.filter((i) => i.category === 'commitment').length;
+  }, [actionItems]);
+
+  const approvedCommitmentsCount = useMemo(() => {
+    return actionItems.filter(
+      (i) => i.category === 'commitment' && i.approval_status === 'approved'
+    ).length;
+  }, [actionItems]);
+
+  const pendingReviewCount = useMemo(() => {
+    return actionItems.filter((i) => i.approval_status === 'pending').length;
+  }, [actionItems]);
+
+  const approvedTotalCount = useMemo(() => {
+    return actionItems.filter((i) => i.approval_status === 'approved').length;
+  }, [actionItems]);
+
+  const rejectedTotalCount = useMemo(() => {
+    return actionItems.filter((i) => i.approval_status === 'rejected').length;
   }, [actionItems]);
 
   const followUpsList = useMemo(() => {
@@ -282,7 +416,22 @@ export default function App() {
                     </div>
                   </div>
                   <div className="metric-value">{confirmedCommitmentsCount}</div>
-                  <div className="metric-footer">{confirmedCommitmentsCount > 0 ? 'Explicit agreements tracked' : 'Awaiting meeting processing'}</div>
+                  <div className="metric-footer">{confirmedCommitmentsCount > 0 ? `${approvedCommitmentsCount} approved by reviewer` : 'Awaiting meeting processing'}</div>
+                </div>
+
+                <div className="metric-card theme-blue">
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-blue)' }}>PENDING REVIEW</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-blue)', color: 'var(--color-blue)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">{pendingReviewCount}</div>
+                  <div className="metric-footer">{pendingReviewCount > 0 ? 'Awaiting human approval' : 'All items reviewed'}</div>
                 </div>
 
                 <div className="metric-card theme-amber">
@@ -597,7 +746,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Filter Toolbar */}
+                  {/* Category Filter Toolbar */}
                   <div className="filter-toolbar">
                     <div className="filter-pills-cluster">
                       <button
@@ -605,7 +754,7 @@ export default function App() {
                         className={`filter-pill ${activeActionCategory === 'all' ? 'active' : ''}`}
                         onClick={() => setActiveActionCategory('all')}
                       >
-                        All Items ({actionItems.length})
+                        All Categories ({actionItems.length})
                       </button>
                       <button
                         type="button"
@@ -635,6 +784,50 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Human Approval Status Filter Toolbar */}
+                  <div className="filter-toolbar" style={{ marginTop: '0.5rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--border-color)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Approval Status:
+                      </span>
+                      <div className="filter-pills-cluster">
+                        <button
+                          type="button"
+                          className={`filter-pill ${actionApprovalFilter === 'all' ? 'active' : ''}`}
+                          onClick={() => setActionApprovalFilter('all')}
+                        >
+                          All ({actionItems.length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${actionApprovalFilter === 'pending' ? 'active theme-blue' : ''}`}
+                          onClick={() => setActionApprovalFilter('pending')}
+                        >
+                          Pending Review ({pendingReviewCount})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${actionApprovalFilter === 'approved' ? 'active theme-green' : ''}`}
+                          onClick={() => setActionApprovalFilter('approved')}
+                        >
+                          Approved ({approvedTotalCount})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${actionApprovalFilter === 'rejected' ? 'active' : ''}`}
+                          style={actionApprovalFilter === 'rejected' ? { backgroundColor: 'var(--bg-pale-red)', color: 'var(--color-red)', borderColor: 'var(--border-red)' } : {}}
+                          onClick={() => setActionApprovalFilter('rejected')}
+                        >
+                          Rejected ({rejectedTotalCount})
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.775rem', color: 'var(--color-teal)', fontWeight: 500 }}>
+                      Commitment Firewall: <strong>Deterministic Verification</strong>
+                    </div>
+                  </div>
+
                   {filteredActionItems.length === 0 ? (
                     <div className="saas-empty-state">
                       <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
@@ -643,11 +836,11 @@ export default function App() {
                           <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                         </svg>
                       </div>
-                      <h3 className="empty-state-title">No Items Match This Category</h3>
+                      <h3 className="empty-state-title">No Items Match The Selected Filters</h3>
                       <p className="empty-state-desc">
                         {actionItems.length === 0
                           ? 'Add a meeting transcript and click "Process with AI" to extract categorized action items.'
-                          : 'No action items currently fit the selected filter.'}
+                          : 'Try selecting a different category or approval filter above to view items.'}
                       </p>
                       {actionItems.length === 0 && (
                         <button
@@ -670,6 +863,13 @@ export default function App() {
                             : item.category === 'suggestion'
                             ? 'card-suggestion'
                             : 'card-unresolved';
+
+                        const isEditing = editingTaskId === item.task_id;
+                        const isConfirmingReject = confirmRejectTaskId === item.task_id;
+                        const isItemLoading = actionLoadingId === item.task_id;
+                        const isApproved = item.approval_status === 'approved';
+                        const isRejected = item.approval_status === 'rejected';
+                        const isPending = !isApproved && !isRejected;
 
                         return (
                           <div key={item.task_id} className={`outcome-card ${cardThemeClass}`}>
@@ -696,93 +896,313 @@ export default function App() {
                                 {item.category === 'unresolved_question' && (
                                   <span className="badge-category unresolved">❓ Unresolved Question</span>
                                 )}
-                                <span className="badge-approval" title="Awaiting human review in Phase 4">
-                                  ⏳ Pending Approval
-                                </span>
+
+                                {/* Approval Badge */}
+                                {isApproved && (
+                                  <span className="badge-approval approved" title="Approved by human reviewer">
+                                    ✓ Approved
+                                  </span>
+                                )}
+                                {isRejected && (
+                                  <span className="badge-approval rejected" title="Rejected by human reviewer">
+                                    ✕ Rejected
+                                  </span>
+                                )}
+                                {isPending && (
+                                  <span className="badge-approval pending" title="Awaiting human review">
+                                    ⏳ Pending Review
+                                  </span>
+                                )}
+
+                                {/* Commitment Firewall Status Badge */}
+                                {isApproved ? (
+                                  <span className="badge-firewall eligible" title="Commitment Firewall: Eligible for downstream execution">
+                                    🛡️ Firewall: Eligible
+                                  </span>
+                                ) : isRejected ? (
+                                  <span className="badge-firewall rejected" title="Commitment Firewall: Blocked (Rejected)">
+                                    🛡️ Firewall: Blocked
+                                  </span>
+                                ) : (
+                                  <span className="badge-firewall blocked" title="Commitment Firewall: Blocked (Pending approval)">
+                                    🛡️ Firewall: Blocked
+                                  </span>
+                                )}
                               </div>
                             </div>
 
-                            {/* Optional detailed description if distinct from title */}
-                            {item.description && item.description.trim() !== item.title.trim() && (
-                              <p className="outcome-desc-text">{item.description}</p>
-                            )}
-
-                            {/* Attributes: Owner and Deadline */}
-                            <div className="outcome-attributes-row">
-                              {item.owner ? (
-                                <span className="attribute-tag" title="Assigned owner from conversation">
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                    <circle cx="12" cy="7" r="4" />
-                                  </svg>
-                                  <span>Owner: <strong>{item.owner}</strong></span>
-                                </span>
-                              ) : (
-                                <span className="attribute-tag missing" title="Owner is not explicitly specified in the transcript">
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="12" y1="8" x2="12" y2="12" />
-                                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                                  </svg>
-                                  <span>Owner needed</span>
-                                </span>
-                              )}
-
-                              {item.due_date ? (
-                                <span className="attribute-tag" title="Extracted timeframe or deadline">
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                                    <line x1="16" y1="2" x2="16" y2="6" />
-                                    <line x1="8" y1="2" x2="8" y2="6" />
-                                    <line x1="3" y1="10" x2="21" y2="10" />
-                                  </svg>
-                                  <span>Deadline: <strong>{item.due_date}</strong></span>
-                                </span>
-                              ) : (
-                                <span className="attribute-tag missing" title="Deadline is not explicitly specified in the transcript">
-                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <line x1="12" y1="8" x2="12" y2="12" />
-                                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                                  </svg>
-                                  <span>Deadline needed</span>
-                                </span>
-                              )}
-                            </div>
-
-                            {/* Clarification Warning Banner */}
-                            {item.clarification_required && (
-                              <div className="clarification-banner">
-                                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <line x1="12" y1="8" x2="12" y2="12" />
-                                  <line x1="12" y1="16" x2="12.01" y2="16" />
-                                </svg>
-                                <div>
-                                  <strong>Clarification Needed:</strong> {item.clarification_note || 'Missing assigned owner or explicit deadline requires human confirmation.'}
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Transcript Evidence Quote Box */}
-                            {item.source_text && (
-                              <div className="evidence-quote-box">
-                                <div className="evidence-header">
-                                  <span>Transcript Evidence</span>
-                                  {item.evidence_verified ? (
-                                    <span className="evidence-badge verified">
-                                      ✓ Grounded in Transcript
-                                    </span>
-                                  ) : (
-                                    <span className="evidence-badge unverified">
-                                      ⚠ Evidence Unverified
+                            {/* Edit Form Mode */}
+                            {isEditing ? (
+                              <div className="action-item-edit-box">
+                                <div className="edit-box-header">
+                                  <span>Edit Action Item Details</span>
+                                  {isApproved && (
+                                    <span className="edit-warning-hint">
+                                      ⚠️ Material edits will automatically reset approval status to Pending Review.
                                     </span>
                                   )}
                                 </div>
-                                <blockquote className="evidence-quote-text">
-                                  "{item.source_text}"
-                                </blockquote>
+
+                                <div className="edit-input-group">
+                                  <label className="edit-input-label">Title <span style={{ color: 'var(--color-red)' }}>*</span></label>
+                                  <input
+                                    type="text"
+                                    className="edit-input-field"
+                                    value={editFormData.title}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, title: e.target.value }))}
+                                    placeholder="Action item title..."
+                                    disabled={isItemLoading}
+                                  />
+                                </div>
+
+                                <div className="edit-input-group">
+                                  <label className="edit-input-label">Description / Context</label>
+                                  <textarea
+                                    className="edit-input-field"
+                                    rows={2}
+                                    value={editFormData.description}
+                                    onChange={(e) => setEditFormData((prev) => ({ ...prev, description: e.target.value }))}
+                                    placeholder="Detailed description or context..."
+                                    disabled={isItemLoading}
+                                    style={{ resize: 'vertical' }}
+                                  />
+                                </div>
+
+                                <div className="edit-inputs-row">
+                                  <div className="edit-input-group">
+                                    <label className="edit-input-label">Assigned Owner</label>
+                                    <input
+                                      type="text"
+                                      className="edit-input-field"
+                                      value={editFormData.owner}
+                                      onChange={(e) => setEditFormData((prev) => ({ ...prev, owner: e.target.value }))}
+                                      placeholder="e.g. Sarah Chen"
+                                      disabled={isItemLoading}
+                                    />
+                                  </div>
+                                  <div className="edit-input-group">
+                                    <label className="edit-input-label">Due Date / Timeframe</label>
+                                    <input
+                                      type="text"
+                                      className="edit-input-field"
+                                      value={editFormData.due_date}
+                                      onChange={(e) => setEditFormData((prev) => ({ ...prev, due_date: e.target.value }))}
+                                      placeholder="e.g. Friday 5pm, 2026-11-01"
+                                      disabled={isItemLoading}
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="edit-actions-row">
+                                  <button
+                                    type="button"
+                                    className="saas-btn saas-btn-secondary saas-btn-sm"
+                                    onClick={handleCancelEdit}
+                                    disabled={isItemLoading}
+                                  >
+                                    Cancel
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="saas-btn saas-btn-primary saas-btn-sm"
+                                    onClick={() => handleSaveEdit(item.task_id)}
+                                    disabled={isItemLoading}
+                                  >
+                                    {isItemLoading ? 'Saving...' : 'Save Changes'}
+                                  </button>
+                                </div>
                               </div>
+                            ) : (
+                              <>
+                                {/* Description if distinct from title */}
+                                {item.description && item.description.trim() !== item.title.trim() && (
+                                  <p className="outcome-desc-text">{item.description}</p>
+                                )}
+
+                                {/* Attributes: Owner and Deadline */}
+                                <div className="outcome-attributes-row">
+                                  {item.owner ? (
+                                    <span className="attribute-tag" title="Assigned owner from conversation">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                        <circle cx="12" cy="7" r="4" />
+                                      </svg>
+                                      <span>Owner: <strong>{item.owner}</strong></span>
+                                    </span>
+                                  ) : (
+                                    <span className="attribute-tag missing" title="Owner is not explicitly specified in the transcript">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                      </svg>
+                                      <span>Owner needed</span>
+                                    </span>
+                                  )}
+
+                                  {item.due_date ? (
+                                    <span className="attribute-tag" title="Extracted timeframe or deadline">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                                        <line x1="16" y1="2" x2="16" y2="6" />
+                                        <line x1="8" y1="2" x2="8" y2="6" />
+                                        <line x1="3" y1="10" x2="21" y2="10" />
+                                      </svg>
+                                      <span>Deadline: <strong>{item.due_date}</strong></span>
+                                    </span>
+                                  ) : (
+                                    <span className="attribute-tag missing" title="Deadline is not explicitly specified in the transcript">
+                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <line x1="12" y1="8" x2="12" y2="12" />
+                                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                                      </svg>
+                                      <span>Deadline needed</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Clarification Warning Banner */}
+                                {item.clarification_required && (
+                                  <div className="clarification-banner">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <line x1="12" y1="8" x2="12" y2="12" />
+                                      <line x1="12" y1="16" x2="12.01" y2="16" />
+                                    </svg>
+                                    <div>
+                                      <strong>Clarification Needed:</strong> {item.clarification_note || 'Missing assigned owner or explicit deadline requires human confirmation.'}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Transcript Evidence Quote Box */}
+                                {item.source_text && (
+                                  <div className="evidence-quote-box">
+                                    <div className="evidence-header">
+                                      <span>Transcript Evidence</span>
+                                      {item.evidence_verified ? (
+                                        <span className="evidence-badge verified">
+                                          ✓ Grounded in Transcript
+                                        </span>
+                                      ) : (
+                                        <span className="evidence-badge unverified">
+                                          ⚠ Evidence Unverified
+                                        </span>
+                                      )}
+                                    </div>
+                                    <blockquote className="evidence-quote-text">
+                                      "{item.source_text}"
+                                    </blockquote>
+                                  </div>
+                                )}
+
+                                {/* Action Review & Human Approval Bar */}
+                                <div className="action-review-bar">
+                                  {isPending && (
+                                    <>
+                                      {isConfirmingReject ? (
+                                        <div className="reject-confirm-bar" style={{ width: '100%', justifyContent: 'space-between' }}>
+                                          <span>Reject this item? It will be blocked from execution.</span>
+                                          <div style={{ display: 'flex', gap: '0.4rem' }}>
+                                            <button
+                                              type="button"
+                                              className="btn-reject"
+                                              onClick={() => handleRejectItem(item.task_id)}
+                                              disabled={isItemLoading}
+                                            >
+                                              {isItemLoading ? 'Rejecting...' : 'Yes, Reject'}
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn-edit-action"
+                                              onClick={() => setConfirmRejectTaskId(null)}
+                                              disabled={isItemLoading}
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        <>
+                                          <div className="review-actions-cluster">
+                                            <button
+                                              type="button"
+                                              className="btn-approve"
+                                              onClick={() => handleApproveItem(item.task_id)}
+                                              disabled={isItemLoading}
+                                              title="Approve this item for execution"
+                                            >
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                <polyline points="20 6 9 17 4 12" />
+                                              </svg>
+                                              <span>{isItemLoading ? 'Approving...' : 'Approve'}</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn-reject"
+                                              onClick={() => setConfirmRejectTaskId(item.task_id)}
+                                              disabled={isItemLoading}
+                                              title="Reject this item"
+                                            >
+                                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <line x1="18" y1="6" x2="6" y2="18" />
+                                                <line x1="6" y1="6" x2="18" y2="18" />
+                                              </svg>
+                                              <span>Reject</span>
+                                            </button>
+                                            <button
+                                              type="button"
+                                              className="btn-edit-action"
+                                              onClick={() => handleStartEdit(item)}
+                                              disabled={isItemLoading}
+                                              title="Edit title, owner, or deadline"
+                                            >
+                                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                                <path d="M12 20h9" />
+                                                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                              </svg>
+                                              <span>Edit</span>
+                                            </button>
+                                          </div>
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                            Awaiting Human Review
+                                          </span>
+                                        </>
+                                      )}
+                                    </>
+                                  )}
+
+                                  {isApproved && (
+                                    <>
+                                      <div className="review-actions-cluster">
+                                        <button
+                                          type="button"
+                                          className="btn-edit-action"
+                                          onClick={() => handleStartEdit(item)}
+                                          disabled={isItemLoading}
+                                          title="Edit action item details"
+                                        >
+                                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                            <path d="M12 20h9" />
+                                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                                          </svg>
+                                          <span>Edit Item</span>
+                                        </button>
+                                      </div>
+                                      <span style={{ fontSize: '0.75rem', color: 'var(--color-green)', fontWeight: 500 }}>
+                                        ✓ Approved &amp; Firewall Eligible
+                                      </span>
+                                    </>
+                                  )}
+
+                                  {isRejected && (
+                                    <span style={{ fontSize: '0.75rem', color: 'var(--color-red)', fontWeight: 500 }}>
+                                      ✕ Rejected by Reviewer • Blocked by Firewall
+                                    </span>
+                                  )}
+                                </div>
+                              </>
                             )}
 
                             <div className="outcome-card-footer">

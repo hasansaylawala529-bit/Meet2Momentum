@@ -249,9 +249,10 @@ def list_decisions(meeting_id: Optional[str] = None, db_path: Optional[str] = No
 def list_action_items(
     meeting_id: Optional[str] = None,
     category: Optional[str] = None,
+    approval_status: Optional[str] = None,
     db_path: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """Retrieve action items, optionally filtered by meeting_id or category."""
+    """Retrieve action items, optionally filtered by meeting_id, category, or approval_status."""
     conn = get_db_connection(db_path)
     try:
         cursor = conn.cursor()
@@ -263,6 +264,9 @@ def list_action_items(
         if category:
             query += " AND category = ?"
             params.append(category)
+        if approval_status:
+            query += " AND approval_status = ?"
+            params.append(approval_status)
         query += " ORDER BY created_at DESC"
         
         cursor.execute(query, tuple(params))
@@ -277,3 +281,83 @@ def list_action_items(
         return result
     finally:
         conn.close()
+
+
+def get_action_item(task_id: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Retrieve single action item by task_id."""
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM action_items WHERE task_id = ?", (task_id,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        d = dict(row)
+        d["clarification_required"] = bool(d.get("clarification_required", 0))
+        d["conflict_flag"] = bool(d.get("conflict_flag", 0))
+        d["evidence_verified"] = bool(d.get("evidence_verified", 1))
+        return d
+    finally:
+        conn.close()
+
+
+def update_action_item(
+    task_id: str,
+    fields: Dict[str, Any],
+    db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Atomically update specified fields on an action item.
+    Returns the updated action item dictionary, or None if not found.
+    """
+    if not fields:
+        return get_action_item(task_id, db_path=db_path)
+
+    # Allowed columns to update
+    allowed_columns = {
+        "title",
+        "description",
+        "category",
+        "commitment_status",
+        "owner",
+        "due_date",
+        "source_text",
+        "clarification_required",
+        "clarification_note",
+        "duplicate_of",
+        "conflict_flag",
+        "evidence_verified",
+        "approval_status",
+        "execution_status",
+        "task_status",
+    }
+
+    set_clauses = []
+    params = []
+
+    for k, v in fields.items():
+        if k in allowed_columns:
+            set_clauses.append(f"{k} = ?")
+            # Convert booleans to 1 / 0 for SQLite
+            if isinstance(v, bool):
+                params.append(1 if v else 0)
+            else:
+                params.append(v)
+
+    if not set_clauses:
+        return get_action_item(task_id, db_path=db_path)
+
+    params.append(task_id)
+    sql = f"UPDATE action_items SET {', '.join(set_clauses)} WHERE task_id = ?"
+
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute(sql, tuple(params))
+            if cursor.rowcount == 0:
+                return None
+        return get_action_item(task_id, db_path=db_path)
+    finally:
+        conn.close()
+

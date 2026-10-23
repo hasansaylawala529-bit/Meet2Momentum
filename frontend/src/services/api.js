@@ -143,12 +143,13 @@ export async function fetchDecisions(meetingId = null) {
 }
 
 /**
- * Fetch all action items across workspace or filtered by meeting/category
+ * Fetch all action items across workspace or filtered by meeting/category/approvalStatus
  */
-export async function fetchActionItems(meetingId = null, category = null) {
+export async function fetchActionItems(meetingId = null, category = null, approvalStatus = null) {
   const params = new URLSearchParams();
   if (meetingId) params.append('meeting_id', meetingId);
   if (category) params.append('category', category);
+  if (approvalStatus) params.append('approval_status', approvalStatus);
 
   const queryString = params.toString();
   const url = queryString ? `${API_BASE_URL}/api/action-items?${queryString}` : `${API_BASE_URL}/api/action-items`;
@@ -164,3 +165,129 @@ export async function fetchActionItems(meetingId = null, category = null) {
 
   return await res.json();
 }
+
+/**
+ * Edit an action item's title, description, owner, or due_date
+ */
+export async function updateActionItem(taskId, updates) {
+  if (!taskId) throw new Error('Task ID is required to update an action item.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(updates)
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to update action item.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Explicitly approve a pending action item
+ */
+export async function approveActionItem(taskId, note = null) {
+  if (!taskId) throw new Error('Task ID is required to approve an action item.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/approve`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ note: note || null })
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to approve action item.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Explicitly reject a pending action item
+ */
+export async function rejectActionItem(taskId, note = null) {
+  if (!taskId) throw new Error('Task ID is required to reject an action item.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/reject`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({ note: note || null })
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to reject action item.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Evaluate Commitment Firewall eligibility for a single action item
+ */
+export async function fetchActionItemFirewall(taskId) {
+  if (!taskId) throw new Error('Task ID is required for firewall check.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/firewall`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to evaluate Commitment Firewall status.');
+  }
+
+  return await res.json();
+}
+
+/**
+ * Evaluate Commitment Firewall eligibility across all action items
+ */
+export async function fetchFirewallEvaluations(meetingId = null) {
+  const url = meetingId
+    ? `${API_BASE_URL}/api/action-items/firewall/evaluations?meeting_id=${encodeURIComponent(meetingId)}`
+    : `${API_BASE_URL}/api/action-items/firewall/evaluations`;
+
+  const res = await fetch(url, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to evaluate Commitment Firewall evaluations.');
+  }
+
+  return await res.json();
+}
+

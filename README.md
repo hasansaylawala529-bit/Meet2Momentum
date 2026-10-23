@@ -7,37 +7,58 @@ Meet2Momentum is an AI-powered meeting-to-execution automation system built for 
 
 ---
 
-## Phase 2 Scope & Status
+## Phase 3 Scope & Status
 
-This repository is at **Phase 2: Gemini AI Meeting Intelligence**.
+This repository is at **Phase 3: Human Approval and Commitment Firewall**.
 
-### What Works in Phase 2:
-- **Google Gemini AI Extraction Engine (`google-genai` SDK)**:
-  - Ground-truth meeting outcome extraction using Gemini models (default: `gemini-2.5-flash`).
-  - Strict Pydantic-enforced extraction schemas (`MeetingExtractionRaw`, `ExtractedDecisionRaw`, `ExtractedActionItemRaw`).
-  - **Evidence Grounding Verification**: Verifies every verbatim transcript quote against the original saved meeting text using exact and whitespace-normalized substring matching. Sets `evidence_verified` flag accordingly without hallucinating or modifying quotes.
-  - **Strict Outcome Classification**:
-    - `commitment`: Confirmed commitments with explicit agreement or accepted responsibility (e.g., "Riya will complete the login page by Oct 25").
-    - `suggestion`: Exploratory ideas without consensus (e.g., "We should consider adding dark mode next week").
-    - `unresolved_question`: Open questions, unassigned roles, or pending decisions (e.g., "Who will test the application?").
-  - **Nullable Owners and Deadlines**: Unassigned owners or unspecified dates remain explicitly `null` instead of being fabricated. Missing fields automatically trigger `clarification_required = True`.
-  - **Transactional Re-extraction Safety**: Re-extracting a meeting cleanly replaces previous decisions and action items for that meeting inside a single SQLite transaction, preventing duplicate records.
-  - **Pending Approval Initial State**: In accordance with the core principle (*AI proposes. Humans approve. The system enforces*), all newly extracted items initialize with `approval_status = "pending"`.
-- **FastAPI Endpoints (`http://127.0.0.1:8000`)**:
-  - `POST /api/meetings/{meeting_id}/extract`: Triggers Gemini extraction on saved transcripts.
-  - `GET /api/meetings/{meeting_id}/decisions` & `GET /api/decisions`: Retrieves persisted decisions.
-  - `GET /api/meetings/{meeting_id}/action-items` & `GET /api/action-items`: Retrieves persisted action items with category filters.
-- **Enhanced Colorful Professional Light Frontend (`http://127.0.0.1:5173`)**:
-  - **Meetings Workspace**: One-click "Process with AI" button on meeting cards with live loading spinner, extraction outcome summaries, and card-level error alerts.
-  - **Decisions Workspace**: Live decisions log showing meeting associations, supporting rationale, verbatim evidence excerpt boxes, and "Grounded in Transcript" badges (Lavender theme).
-  - **Action Items Workspace**: Category filters (`All`, `Confirmed Commitments`, `Suggestions`, `Unresolved Questions`), color-coded badges (Green, Peach, Amber), owner/deadline tags (or amber "Owner needed" / "Deadline needed" badges), clarification warning banners, and transcript quote citations.
-  - **Follow-ups Workspace**: Surfaces unresolved questions and items requiring clarification.
-  - **Overview Metrics**: Live counters for total meetings, extracted decisions, confirmed commitments, and pending follow-ups.
+### Core Principle
+> **"AI proposes. Humans approve. The system enforces."**
+
+The Gemini AI extraction engine proposes decisions and action items from transcripts, but no AI-proposed item may enter downstream execution without explicit human review and deterministic validation.
+
+---
+
+### What Works in Phase 3:
+
+#### 1. Human Review & Approval Workflow
+- **Initial State**: All newly extracted action items from Phase 2 initialize with `approval_status = "pending"`.
+- **Allowed State Transitions**:
+  - `pending` &rarr; `approved` (via `POST /api/action-items/{task_id}/approve`)
+  - `pending` &rarr; `rejected` (via `POST /api/action-items/{task_id}/reject`)
+- **Strict Transition Enforcement**: Only items in `pending` status may transition to `approved` or `rejected`. Direct transitions between `approved` and `rejected`, or re-approving an already `approved` item, are rejected by the backend with HTTP 400 (`FirewallValidationError`).
+- **Category Invariance**: Approving an exploratory `suggestion` or an `unresolved_question` marks it `approved`, but never mutates its semantic category into a `commitment`.
+
+#### 2. Material Edit Rule (Automatic Re-Approval)
+- Users can edit an action item's `title`, `description`, `owner`, or `due_date` via `PATCH /api/action-items/{task_id}`.
+- If an item was previously `approved` and any material field (`title`, `description`, `owner`, `due_date`) is modified, the backend **automatically resets its status to `pending`** (`approval_status = "pending"`).
+- This prevents execution of altered commitments without renewed human oversight.
+
+#### 3. Deterministic Backend Commitment Firewall
+- **Server-Side Verification**: The firewall service (`backend/app/services/firewall.py`) never trusts client-supplied approval assertions; it inspects persisted SQLite state.
+- **Eligibility Evaluation (`evaluate_commitment_firewall`)**:
+  - **`eligible = True`** (`firewall_status = "eligible"`): Requires `approval_status == "approved"`, non-empty `task_id`, and non-empty `title`.
+  - **`eligible = False`** (`firewall_status = "blocked"`):
+    - Block reason `"approval_pending"` if item is in `pending` review.
+    - Block reason `"item_rejected"` if item was rejected by human reviewer.
+    - Block reason `"missing_required_information"` if required fields are missing.
+- **Firewall Inspection Endpoints**:
+  - `GET /api/action-items/{task_id}/firewall`: Evaluates a single item's firewall status.
+  - `GET /api/action-items/firewall/evaluations`: Evaluates all action items in bulk.
+
+#### 4. Frontend Review, Edit & Firewall UI
+- **Action Items Workspace**:
+  - **Dual Filter Toolbars**: Filter by Category (`All`, `Commitments`, `Suggestions`, `Unresolved Questions`) and Approval Status (`All`, `Pending Review`, `Approved`, `Rejected`).
+  - **Approval Badges**: Color-coded badges for `⏳ Pending Review` (Pale Blue), `✓ Approved` (Pale Mint/Green), and `✕ Rejected` (Pale Red).
+  - **Firewall Status Badges**: `🛡️ Firewall: Eligible` for approved items; `🛡️ Firewall: Blocked` for pending/rejected items.
+  - **Review Action Bar**: For pending items, provides quick-action buttons for "Approve", "Reject" (with inline confirmation prompt), and "Edit".
+  - **Inline Editing Mode**: Clean in-place editing form for title, description, owner, and deadline, with an explicit warning hint if editing an approved item.
+- **Overview Metrics**: Added a dedicated "PENDING REVIEW" metric card and refined "CONFIRMED COMMITMENTS" with a human approval count.
+
+---
 
 ### Deliberately Deferred to Later Phases:
-- Semantic duplicate and conflict detection engine (Phase 3).
-- Interactive approval gate / Commitment Firewall execution enforcement (Phase 4).
-- CSV/JSON export & GitHub / Trello board sync (Phase 5).
+- Execution sync to external tools (GitHub Issues, Trello, Jira) (Phase 4).
+- CSV/JSON export and reporting workflows (Phase 5).
 
 
 ---
@@ -68,14 +89,20 @@ Meet2Momentum/
 │   │   ├── __init__.py
 │   │   ├── main.py                                 # FastAPI application & lifespan
 │   │   ├── config.py                               # Environment loader & configuration
-│   │   ├── database.py                             # SQLite initialization & CRUD
-│   │   ├── models.py                               # Pydantic v2 domain schemas
+│   │   ├── database.py                             # SQLite initialization, CRUD & atomicity
+│   │   ├── models.py                               # Pydantic v2 domain schemas & validation
+│   │   ├── services/
+│   │   │   ├── __init__.py
+│   │   │   ├── extractor.py                        # Gemini extraction & ground-truth validation
+│   │   │   └── firewall.py                         # Commitment Firewall & approval logic
 │   │   └── routers/
 │   │       ├── __init__.py
-│   │       └── meetings.py                         # Transcript ingestion & retrieval API
+│   │       ├── meetings.py                         # Transcript ingestion, extraction & outcomes
+│   │       └── outcomes.py                         # Action item review, editing, firewall & decisions
 │   ├── tests/
 │   │   ├── __init__.py
-│   │   └── test_phase1.py                          # 10 automated test suites
+│   │   ├── test_phase1.py                          # 10 automated test suites
+│   │   └── test_phase2.py                          # Phase 2 test suite
 │   └── data/                                       # SQLite runtime data (ignored)
 │       └── meet2momentum.db
 └── frontend/
@@ -91,7 +118,7 @@ Meet2Momentum/
         │   └── api.js                              # HTTP client for backend endpoints
         └── components/
             ├── Header.jsx                          # App header with live status
-            ├── Navigation.jsx                      # Navigation tabs with phase badges
+            ├── Sidebar.jsx                         # Left sidebar navigation with counters
             ├── TranscriptWorkspace.jsx             # Transcript form & file upload
             ├── SampleTranscripts.jsx               # Demo presets
             └── MeetingHistory.jsx                  # Stored SQLite meetings panel
@@ -122,7 +149,7 @@ GEMINI_MODEL=gemini-2.5-flash
 # DATABASE_PATH=data/meet2momentum.db
 ```
 
-> **Security Note:** Never place credentials in React frontend code, browser requests, or Git-tracked files. The backend reads `GEMINI_API_KEY` strictly from the server environment. If the API key is missing, Phase 1 features remain fully functional, and extraction requests return a safe configuration error rather than crashing.
+> **Security Note:** Never place credentials in React frontend code, browser requests, or Git-tracked files. The backend reads `GEMINI_API_KEY` strictly from the server environment. If the API key is missing, meeting capture and manual review remain fully functional, and extraction requests return a safe configuration error rather than crashing.
 
 ---
 
@@ -150,11 +177,18 @@ pip install -r requirements.txt
 uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-The backend API will be available at:
+The backend API endpoints:
 - API Root: `http://127.0.0.1:8000`
-- Health Endpoint: `http://127.0.0.1:8000/api/health`
-- Decisions Endpoint: `http://127.0.0.1:8000/api/decisions`
-- Action Items Endpoint: `http://127.0.0.1:8000/api/action-items`
+- Health Endpoint: `GET /api/health`
+- Meeting Extraction: `POST /api/meetings/{meeting_id}/extract`
+- Decisions Endpoints: `GET /api/decisions`, `GET /api/meetings/{meeting_id}/decisions`
+- Action Items Query: `GET /api/action-items?category=&approval_status=`, `GET /api/meetings/{meeting_id}/action-items`
+- Single Action Item: `GET /api/action-items/{task_id}`
+- Action Item Approval: `POST /api/action-items/{task_id}/approve`
+- Action Item Rejection: `POST /api/action-items/{task_id}/reject`
+- Action Item Material Edit: `PATCH /api/action-items/{task_id}`
+- Single Item Firewall Check: `GET /api/action-items/{task_id}/firewall`
+- Bulk Firewall Evaluations: `GET /api/action-items/firewall/evaluations`
 - Interactive Swagger Docs: `http://127.0.0.1:8000/docs`
 
 ---
@@ -186,40 +220,45 @@ The frontend application will be live at:
 3. **Evidence Validation:** The backend automatically verifies that every quoted excerpt appears verbatim in the saved transcript without hallucinations.
 4. **Review Decisions:** In the **Decisions** tab, view extracted decisions with exact transcript citations, supporting rationale, and "Grounded in Transcript" verification tags.
 5. **Review Action Items:** In the **Action Items** tab, filter by **Confirmed Commitments** (Green), **Suggestions** (Peach), or **Unresolved Questions** (Amber). Unassigned owners or missing deadlines are highlighted with "Owner needed" and "Deadline needed" tags.
-6. **Human Approval Principle:** Extracted action items initialize in `pending` approval status. AI proposes outcomes, while human approval is preserved for Phase 4.
+6. **Human Approval & Commitment Firewall:** Extracted action items initialize with `pending` approval status. Reviewers can approve, reject, or edit items directly in the Action Items workspace:
+   - **Approve**: Transitions status to `approved`, granting `🛡️ Firewall: Eligible` status for execution.
+   - **Reject**: Transitions status to `rejected`, setting `🛡️ Firewall: Blocked (Rejected)`.
+   - **Material Edit**: If an already `approved` item's title, description, owner, or deadline is modified, the backend automatically resets its status to `pending`, requiring human re-approval.
+   - **Firewall Gate**: The deterministic Commitment Firewall verifies database state server-side to guarantee that no unapproved, rejected, or incomplete item can proceed to downstream execution.
 
 ---
 
-### 6. Running Automated Backend Tests
+### 6. Testing & Quality Assurance
 
-From the `backend/` directory with the virtual environment activated:
+All 30 automated backend test suites and the frontend production build have been executed and verified:
 
 ```powershell
+# Run backend pytest suite (from backend/ directory)
 pytest -v
 ```
 
-All 18 automated test suites verify Phase 1 foundation and Phase 2 intelligence:
-- Health and status endpoints.
-- Meeting persistence and whitespace/empty validation.
-- SQLite schema migrations and idempotency.
-- Evidence verification algorithms (exact and normalized whitespace matching).
-- Pydantic schema validation for commitments, suggestions, and questions.
-- Transactional re-extraction safety (prevents duplicate outcomes).
-- Safe configuration errors when Gemini API key is absent.
-- Workspace-level decisions and action items retrieval endpoints.
-
-
----
-
-### 6. Building the Frontend for Production
-
-From the `frontend/` directory:
+**Results:** `30 passed in 2.79s`
+- **Phase 1 Foundations (10 tests)**: Health endpoints, meeting persistence, whitespace rejection, category and approval enum validations, SQLite schema idempotency.
+- **Phase 2 Gemini AI Extraction (8 tests)**: Exact and normalized whitespace evidence verification, raw model validations, transactional re-extraction safety, workspace retrieval endpoints.
+- **Phase 3 Human Approval & Firewall (12 tests)**:
+  - Pending approval state initialization.
+  - Approve action item (`pending` &rarr; `approved`).
+  - Category invariance (approved suggestions remain suggestions).
+  - Reject action item (`pending` &rarr; `rejected`).
+  - State transition enforcement (rejecting re-approving or direct transitions from non-pending states with HTTP 400).
+  - Material edit rule (editing title, description, owner, or deadline of approved items automatically resets status to `pending`).
+  - Non-material edits and whitespace validation (HTTP 422 on empty title).
+  - Commitment Firewall evaluations: `eligible = True` for approved items; `eligible = False` with `block_reason = "approval_pending"` or `"item_rejected"`.
+  - Bulk Commitment Firewall evaluation endpoint.
+  - Filtering action items by `approval_status`.
+  - 404 handling for non-existent items.
 
 ```powershell
+# Verify frontend production build (from frontend/ directory)
 npm run build
 ```
 
-Production output will be generated into `frontend/dist/` (which is excluded from Git).
+**Build Output:** Production bundle compiled cleanly in 1.50s without errors (`dist/index.html`, `dist/assets/index-*.css`, `dist/assets/index-*.js`).
 
 ---
 

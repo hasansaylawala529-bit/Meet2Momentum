@@ -137,3 +137,41 @@ class ExtractionResponse(BaseModel):
     suggestions_count: int
     unresolved_questions_count: int
     extracted_at: str
+
+
+# --- Phase 3: Approval and Firewall Models ---
+
+class ActionItemUpdate(BaseModel):
+    title: Optional[str] = Field(None, min_length=1, max_length=500, description="Updated task or question description")
+    description: Optional[str] = Field(None, description="Updated context or notes")
+    owner: Optional[str] = Field(None, max_length=100, description="Assigned owner, or null if unassigned")
+    due_date: Optional[str] = Field(None, max_length=100, description="Target deadline or timeframe, or null if unassigned")
+    clarification_note: Optional[str] = Field(None, description="Optional clarification details")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            stripped = v.strip()
+            if not stripped:
+                raise ValueError("Action item title cannot be empty or whitespace only")
+            return stripped
+        return v
+
+
+class ApprovalActionRequest(BaseModel):
+    note: Optional[str] = Field(None, max_length=500, description="Optional human reviewer note or rationale")
+
+
+class FirewallEvaluationResult(BaseModel):
+    task_id: str
+    meeting_id: str
+    title: str
+    category: ActionItemCategory
+    approval_status: ApprovalStatus
+    eligible: bool = Field(..., description="True only if human-approved and satisfying all Commitment Firewall rules")
+    firewall_status: str = Field(..., description="'eligible' if ready for execution, 'blocked' otherwise")
+    block_reason: Optional[str] = Field(None, description="'approval_pending', 'item_rejected', 'missing_required_information', 'invalid_item'")
+    reasons: List[str] = Field(default_factory=list, description="Descriptive list of firewall evaluation points")
+    checked_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+

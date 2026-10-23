@@ -122,14 +122,17 @@ def get_meeting_decisions(meeting_id: str) -> List[Decision]:
 
 
 @router.get("/{meeting_id}/action-items", response_model=List[ActionItem])
-def get_meeting_action_items(meeting_id: str) -> List[ActionItem]:
-    """Retrieve all action items extracted for a specific meeting."""
+def get_meeting_action_items(
+    meeting_id: str,
+    approval_status: Optional[str] = None
+) -> List[ActionItem]:
+    """Retrieve all action items extracted for a specific meeting, optionally filtered by approval_status."""
     meeting = get_meeting(meeting_id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Meeting with ID '{meeting_id}' not found."
         )
-    items = list_action_items(meeting_id=meeting_id)
+    items = list_action_items(meeting_id=meeting_id, approval_status=approval_status)
     return [ActionItem(**i) for i in items]
 
