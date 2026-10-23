@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import FRONTEND_ORIGINS
 from app.database import init_db
 from app.routers.meetings import router as meetings_router
+from app.routers.outcomes import decisions_router, action_items_router
 
 
 @asynccontextmanager
@@ -31,6 +32,9 @@ app.add_middleware(
 
 # Include Routers
 app.include_router(meetings_router)
+app.include_router(decisions_router)
+app.include_router(action_items_router)
+
 
 
 @app.get("/api/health")

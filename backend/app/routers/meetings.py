@@ -1,7 +1,19 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, HTTPException, status
-from app.models import MeetingCreate, MeetingResponse
-from app.database import insert_meeting, list_meetings, get_meeting
+from app.models import (
+    MeetingCreate,
+    MeetingResponse,
+    Decision,
+    ActionItem,
+    ExtractionResponse,
+)
+from app.database import (
+    insert_meeting,
+    list_meetings,
+    get_meeting,
+    list_decisions,
+    list_action_items,
+)
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -46,3 +58,78 @@ def get_meeting_by_id(meeting_id: str) -> MeetingResponse:
             detail=f"Meeting with ID '{meeting_id}' not found."
         )
     return MeetingResponse(**meeting)
+
+
+@router.post("/{meeting_id}/extract", response_model=ExtractionResponse)
+def extract_meeting(meeting_id: str) -> ExtractionResponse:
+    """
+    Extract decisions, commitments, suggestions, and unresolved questions
+    from a saved meeting transcript using Google Gemini AI.
+    """
+    meeting = get_meeting(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meeting with ID '{meeting_id}' not found."
+        )
+
+    transcript = meeting.get("transcript")
+    if not transcript or not transcript.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The meeting does not have a valid transcript to extract outcomes from."
+        )
+
+    try:
+        from app.services.extractor import extract_meeting_outcomes
+        result = extract_meeting_outcomes(
+            meeting_id=meeting_id,
+            title=meeting.get("title", "Untitled Meeting"),
+            transcript=transcript,
+            meeting_date=meeting.get("meeting_date"),
+        )
+        return result
+    except ValueError as e:
+        # Configuration error or invalid input/transcript
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except RuntimeError as e:
+        # Upstream AI service failure or sanitized API authentication failure
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Unexpected extraction failure: {str(e)}"
+        )
+
+
+@router.get("/{meeting_id}/decisions", response_model=List[Decision])
+def get_meeting_decisions(meeting_id: str) -> List[Decision]:
+    """Retrieve all decisions extracted for a specific meeting."""
+    meeting = get_meeting(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meeting with ID '{meeting_id}' not found."
+        )
+    decisions = list_decisions(meeting_id=meeting_id)
+    return [Decision(**d) for d in decisions]
+
+
+@router.get("/{meeting_id}/action-items", response_model=List[ActionItem])
+def get_meeting_action_items(meeting_id: str) -> List[ActionItem]:
+    """Retrieve all action items extracted for a specific meeting."""
+    meeting = get_meeting(meeting_id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Meeting with ID '{meeting_id}' not found."
+        )
+    items = list_action_items(meeting_id=meeting_id)
+    return [ActionItem(**i) for i in items]
+

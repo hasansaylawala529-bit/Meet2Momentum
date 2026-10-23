@@ -1,6 +1,15 @@
 import React from 'react';
 
-export default function Sidebar({ activeTab, onSelectTab, meetingCount, isOpen, onClose }) {
+export default function Sidebar({
+  activeTab,
+  onSelectTab,
+  meetingCount = 0,
+  decisionCount = 0,
+  actionCount = 0,
+  followupCount = 0,
+  isOpen,
+  onClose,
+}) {
   const navItems = [
     {
       id: 'overview',
@@ -32,6 +41,7 @@ export default function Sidebar({ activeTab, onSelectTab, meetingCount, isOpen, 
     {
       id: 'decisions',
       label: 'Decisions',
+      count: decisionCount > 0 ? decisionCount : null,
       iconColor: 'var(--color-lavender)',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -43,6 +53,7 @@ export default function Sidebar({ activeTab, onSelectTab, meetingCount, isOpen, 
     {
       id: 'actions',
       label: 'Action Items',
+      count: actionCount > 0 ? actionCount : null,
       iconColor: 'var(--color-green)',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -54,6 +65,7 @@ export default function Sidebar({ activeTab, onSelectTab, meetingCount, isOpen, 
     {
       id: 'followups',
       label: 'Follow-ups',
+      count: followupCount > 0 ? followupCount : null,
       iconColor: 'var(--color-amber)',
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

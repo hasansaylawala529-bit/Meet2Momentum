@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -61,18 +61,18 @@ class MeetingResponse(BaseModel):
     created_at: str
 
 
-# --- Decision Schema ---
+# --- Persisted Domain Models ---
 
 class Decision(BaseModel):
     decision_id: str
     meeting_id: str
     title: str
     description: Optional[str] = None
+    rationale: Optional[str] = None
     source_text: Optional[str] = None
+    evidence_verified: bool = True
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
-
-# --- Action Item Schema ---
 
 class ActionItem(BaseModel):
     task_id: str
@@ -88,9 +88,52 @@ class ActionItem(BaseModel):
     due_date: Optional[str] = None
     source_text: Optional[str] = None
     clarification_required: bool = False
+    clarification_note: Optional[str] = None
     duplicate_of: Optional[str] = None
     conflict_flag: bool = False
+    evidence_verified: bool = True
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
     execution_status: ExecutionStatus = ExecutionStatus.NOT_EXPORTED
     task_status: TaskStatus = TaskStatus.PENDING
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# --- Gemini Structured Extraction Schema ---
+
+class ExtractedDecisionRaw(BaseModel):
+    title: str = Field(..., description="Concise statement of the confirmed decision")
+    rationale: Optional[str] = Field(None, description="Supporting rationale only if explicitly provided in transcript")
+    source_text: str = Field(..., description="Exact verbatim excerpt from the transcript supporting this decision")
+
+
+class ExtractedActionItemRaw(BaseModel):
+    title: str = Field(..., description="Concise description of the task, suggestion, or question")
+    description: Optional[str] = Field(None, description="Additional context or details from the discussion")
+    category: ActionItemCategory = Field(
+        ...,
+        description="'commitment' for confirmed responsibilities, 'suggestion' for exploratory proposals, 'unresolved_question' for open questions"
+    )
+    owner: Optional[str] = Field(None, description="Explicit owner assigned in the conversation, or null if unassigned/ambiguous")
+    due_date: Optional[str] = Field(None, description="Explicit deadline or timeframe mentioned, or null if unspecified")
+    source_text: str = Field(..., description="Exact verbatim excerpt from the transcript supporting this item")
+    clarification_required: bool = Field(False, description="True if owner, deadline, or scope is ambiguous or missing")
+    clarification_note: Optional[str] = Field(None, description="Explanation of what detail is missing or ambiguous")
+
+
+class MeetingExtractionRaw(BaseModel):
+    decisions: List[ExtractedDecisionRaw] = Field(default_factory=list, description="List of confirmed decisions with supporting quotes")
+    action_items: List[ExtractedActionItemRaw] = Field(default_factory=list, description="List of action items, suggestions, and unresolved questions")
+
+
+# --- API Response Schemas ---
+
+class ExtractionResponse(BaseModel):
+    meeting_id: str
+    decisions: List[Decision]
+    action_items: List[ActionItem]
+    total_decisions: int
+    total_action_items: int
+    commitments_count: int
+    suggestions_count: int
+    unresolved_questions_count: int
+    extracted_at: str

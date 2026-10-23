@@ -1334,3 +1334,391 @@ html, body {
     padding: 1.25rem;
   }
 }
+
+/* ==========================================================================
+   Phase 2: Gemini AI Meeting Intelligence Styles
+   ========================================================================== */
+
+/* Per-Meeting Processing & Summary UI */
+.extraction-summary-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.75rem;
+  background-color: var(--bg-pale-mint);
+  border: 1px solid var(--border-green);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--color-green);
+  margin-bottom: 0.85rem;
+}
+
+.summary-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.summary-dot.green {
+  background-color: var(--color-green);
+}
+
+.card-error-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background-color: var(--bg-pale-red);
+  border: 1px solid var(--border-red);
+  border-radius: var(--radius-sm);
+  color: var(--color-red);
+  font-size: 0.8125rem;
+  margin-bottom: 0.85rem;
+}
+
+/* Global Notification Toast */
+.global-notice-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1.25rem;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+  font-size: 0.875rem;
+  box-shadow: var(--shadow-sm);
+  animation: fadeIn 0.25s ease-out;
+}
+
+.global-notice-bar.success {
+  background-color: var(--bg-pale-mint);
+  border: 1px solid var(--border-green);
+  color: var(--color-green);
+}
+
+.global-notice-bar.error {
+  background-color: var(--bg-pale-red);
+  border: 1px solid var(--border-red);
+  color: var(--color-red);
+}
+
+.notice-dismiss-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: currentColor;
+  opacity: 0.7;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  border-radius: 4px;
+}
+
+.notice-dismiss-btn:hover {
+  opacity: 1;
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+/* Filter Toolbar */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.filter-pills-cluster {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.filter-pill {
+  padding: 0.35rem 0.85rem;
+  border-radius: 20px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  background-color: #FFFFFF;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filter-pill:hover {
+  border-color: var(--text-muted);
+  color: var(--text-main);
+}
+
+.filter-pill.active {
+  background-color: var(--color-blue);
+  border-color: var(--color-blue);
+  color: #FFFFFF;
+}
+
+.filter-pill.active.theme-green {
+  background-color: var(--color-green);
+  border-color: var(--color-green);
+  color: #FFFFFF;
+}
+
+.filter-pill.active.theme-peach {
+  background-color: var(--color-peach);
+  border-color: var(--color-peach);
+  color: #FFFFFF;
+}
+
+.filter-pill.active.theme-amber {
+  background-color: var(--color-amber);
+  border-color: var(--color-amber);
+  color: #FFFFFF;
+}
+
+/* Outcome Stream & Cards */
+.outcomes-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.outcome-card {
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+
+.outcome-card:hover {
+  box-shadow: var(--shadow-hover);
+  border-color: #CBD5E1;
+}
+
+.outcome-card.card-decision {
+  border-left: 4px solid var(--color-lavender);
+}
+
+.outcome-card.card-commitment {
+  border-left: 4px solid var(--color-green);
+}
+
+.outcome-card.card-suggestion {
+  border-left: 4px solid var(--color-peach);
+}
+
+.outcome-card.card-unresolved {
+  border-left: 4px solid var(--color-amber);
+}
+
+.outcome-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.outcome-card-title-group {
+  flex: 1;
+}
+
+.outcome-title {
+  font-size: 1.025rem;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.4;
+  margin: 0 0 0.35rem 0;
+}
+
+.outcome-meeting-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.775rem;
+  color: var(--text-secondary);
+}
+
+.outcome-meta-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Badges */
+.badge-category {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.badge-category.commitment {
+  background-color: var(--bg-pale-mint);
+  border: 1px solid var(--border-green);
+  color: var(--color-green);
+}
+
+.badge-category.suggestion {
+  background-color: var(--bg-pale-peach);
+  border: 1px solid var(--border-peach);
+  color: var(--color-peach);
+}
+
+.badge-category.unresolved {
+  background-color: var(--bg-pale-amber);
+  border: 1px solid var(--border-amber);
+  color: var(--color-amber);
+}
+
+.badge-approval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background-color: var(--bg-pale-blue);
+  border: 1px solid var(--border-blue);
+  color: var(--color-blue);
+}
+
+.outcome-desc-text {
+  font-size: 0.875rem;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin: 0 0 0.85rem 0;
+}
+
+.outcome-rationale-box {
+  padding: 0.5rem 0.75rem;
+  background-color: var(--bg-pale-lavender);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--color-lavender);
+  margin-bottom: 0.85rem;
+}
+
+/* Attributes Row: Owner, Deadline */
+.outcome-attributes-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.85rem;
+}
+
+.attribute-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.65rem;
+  background-color: #F8FAFC;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.8125rem;
+  color: var(--text-main);
+}
+
+.attribute-tag.missing {
+  background-color: var(--bg-pale-amber);
+  border-color: var(--border-amber);
+  color: var(--color-amber);
+  font-weight: 600;
+}
+
+/* Clarification Note Warning Banner */
+.clarification-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  background-color: var(--bg-pale-amber);
+  border: 1px solid var(--border-amber);
+  border-radius: var(--radius-sm);
+  color: var(--color-amber);
+  font-size: 0.8125rem;
+  margin-bottom: 0.85rem;
+}
+
+/* Evidence Excerpt Box */
+.evidence-quote-box {
+  background-color: #F8FAFC;
+  border: 1px dashed #CBD5E1;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 1rem;
+  margin-top: 0.65rem;
+}
+
+.evidence-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.evidence-quote-text {
+  font-size: 0.85rem;
+  font-style: italic;
+  color: var(--text-main);
+  line-height: 1.5;
+  margin: 0;
+  border-left: 2px solid #CBD5E1;
+  padding-left: 0.75rem;
+}
+
+.evidence-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  text-transform: none;
+}
+
+.evidence-badge.verified {
+  background-color: var(--bg-pale-mint);
+  color: var(--color-green);
+  border: 1px solid var(--border-green);
+}
+
+.evidence-badge.unverified {
+  background-color: var(--bg-pale-red);
+  color: var(--color-red);
+  border: 1px solid var(--border-red);
+}
+
+/* Card Footer */
+.outcome-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid #F1F5F9;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
