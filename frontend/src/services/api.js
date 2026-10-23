@@ -291,3 +291,120 @@ export async function fetchFirewallEvaluations(meetingId = null) {
   return await res.json();
 }
 
+/**
+ * Fetch execution & export summary metrics
+ */
+export async function fetchExportSummary() {
+  const res = await fetch(`${API_BASE_URL}/api/export/summary`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to retrieve export summary metrics.');
+  }
+
+  return await res.json();
+}
+
+/**
+ * Dispatch batch export for eligible approved commitments
+ */
+export async function dispatchExport(taskIds = null) {
+  const res = await fetch(`${API_BASE_URL}/api/export/dispatch`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(taskIds ? { task_ids: taskIds } : {})
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Export dispatch failed.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Dispatch export for a single action item
+ */
+export async function exportSingleActionItem(taskId) {
+  if (!taskId) throw new Error('Task ID is required for export.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/export`, {
+    method: 'POST',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to export action item.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Trigger client download of approved commitments as CSV
+ */
+export async function downloadExportCsv(meetingId = null) {
+  const url = meetingId
+    ? `${API_BASE_URL}/api/export/csv?meeting_id=${encodeURIComponent(meetingId)}`
+    : `${API_BASE_URL}/api/export/csv`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to download CSV export (Status: ${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = meetingId ? `meet2momentum_commitments_${meetingId}.csv` : 'meet2momentum_commitments.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
+/**
+ * Trigger client download of approved commitments as JSON
+ */
+export async function downloadExportJson(meetingId = null) {
+  const url = meetingId
+    ? `${API_BASE_URL}/api/export/json?meeting_id=${encodeURIComponent(meetingId)}`
+    : `${API_BASE_URL}/api/export/json`;
+
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Failed to download JSON export (Status: ${res.status})`);
+  }
+
+  const blob = await res.blob();
+  const downloadUrl = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = meetingId ? `meet2momentum_commitments_${meetingId}.json` : 'meet2momentum_commitments.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  window.URL.revokeObjectURL(downloadUrl);
+}
+
+

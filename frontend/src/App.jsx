@@ -12,6 +12,11 @@ import {
   approveActionItem,
   rejectActionItem,
   updateActionItem,
+  fetchExportSummary,
+  dispatchExport,
+  exportSingleActionItem,
+  downloadExportCsv,
+  downloadExportJson,
 } from './services/api';
 
 export default function App() {
@@ -45,6 +50,11 @@ export default function App() {
   });
   const [confirmRejectTaskId, setConfirmRejectTaskId] = useState(null);
   const [actionLoadingId, setActionLoadingId] = useState(null);
+
+  // Phase 4: Execution & Export States
+  const [exportSummary, setExportSummary] = useState(null);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportBlockedItems, setExportBlockedItems] = useState([]);
 
   // Fast meeting lookup map
   const meetingMap = useMemo(() => {
@@ -88,15 +98,26 @@ export default function App() {
     }
   }, []);
 
+  const loadExportSummaryData = useCallback(async () => {
+    try {
+      const summary = await fetchExportSummary();
+      setExportSummary(summary);
+    } catch (err) {
+      console.error('Failed to load export summary:', err);
+    }
+  }, []);
+
   const loadOutcomesData = useCallback(async () => {
     setIsLoadingOutcomes(true);
     try {
-      const [decisionsData, actionsData] = await Promise.all([
+      const [decisionsData, actionsData, summaryData] = await Promise.all([
         fetchDecisions(),
         fetchActionItems(),
+        fetchExportSummary().catch(() => null),
       ]);
       setDecisions(decisionsData);
       setActionItems(actionsData);
+      if (summaryData) setExportSummary(summaryData);
     } catch (err) {
       console.error('Failed to load meeting outcomes:', err);
     } finally {
@@ -163,6 +184,7 @@ export default function App() {
       setActionItems((prev) =>
         prev.map((item) => (item.task_id === taskId ? updated : item))
       );
+      loadExportSummaryData();
       setGlobalNotice({
         type: 'success',
         message: `Action item approved. Commitment Firewall: Eligible for execution.`,
@@ -185,6 +207,7 @@ export default function App() {
       setActionItems((prev) =>
         prev.map((item) => (item.task_id === taskId ? updated : item))
       );
+      loadExportSummaryData();
       setGlobalNotice({
         type: 'success',
         message: `Action item rejected. Commitment Firewall: Blocked from execution.`,
@@ -236,6 +259,7 @@ export default function App() {
         prev.map((item) => (item.task_id === taskId ? updated : item))
       );
       setEditingTaskId(null);
+      loadExportSummaryData();
       const isResetToPending = updated.approval_status === 'pending';
       setGlobalNotice({
         type: 'success',
@@ -250,6 +274,87 @@ export default function App() {
       });
     } finally {
       setActionLoadingId(null);
+    }
+  };
+
+  // Phase 4: Execution & Export Engine Handlers
+  const handleExportSingleItem = async (taskId) => {
+    setActionLoadingId(taskId);
+    try {
+      const result = await exportSingleActionItem(taskId);
+      setActionItems((prev) =>
+        prev.map((item) => (item.task_id === taskId ? result.item : item))
+      );
+      await loadExportSummaryData();
+      setGlobalNotice({
+        type: 'success',
+        message: `Commitment "${result.item.title}" successfully dispatched to downstream execution!`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Export blocked by Commitment Firewall: ${err.message}`,
+      });
+    } finally {
+      setActionLoadingId(null);
+    }
+  };
+
+  const handleDispatchBatchExport = async () => {
+    setIsExporting(true);
+    setExportBlockedItems([]);
+    try {
+      const result = await dispatchExport();
+      await Promise.all([loadOutcomesData(), loadExportSummaryData()]);
+      if (result.blocked_items && result.blocked_items.length > 0) {
+        setExportBlockedItems(result.blocked_items);
+        setGlobalNotice({
+          type: 'success',
+          message: `Dispatched ${result.dispatched_count} approved commitments. Note: ${result.blocked_items.length} unapproved items were protected and blocked by Commitment Firewall.`,
+        });
+      } else {
+        setGlobalNotice({
+          type: 'success',
+          message: `Successfully dispatched all ${result.dispatched_count} approved commitments to execution!`,
+        });
+      }
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `Export dispatch failed: ${err.message}`,
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDownloadCsv = async (meetingId = null) => {
+    try {
+      await downloadExportCsv(meetingId);
+      setGlobalNotice({
+        type: 'success',
+        message: 'Commitments CSV export downloaded successfully.',
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `CSV download failed: ${err.message}`,
+      });
+    }
+  };
+
+  const handleDownloadJson = async (meetingId = null) => {
+    try {
+      await downloadExportJson(meetingId);
+      setGlobalNotice({
+        type: 'success',
+        message: 'Commitments JSON export downloaded successfully.',
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: `JSON download failed: ${err.message}`,
+      });
     }
   };
 
@@ -303,6 +408,7 @@ export default function App() {
         decisionCount={decisions.length}
         actionCount={actionItems.length}
         followupCount={followUpsList.length}
+        exportCount={exportSummary?.pending_export_count || 0}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
@@ -446,6 +552,28 @@ export default function App() {
                   </div>
                   <div className="metric-value">{followUpsList.length}</div>
                   <div className="metric-footer">{followUpsList.length > 0 ? 'Requires owner or date confirmation' : 'No unresolved items'}</div>
+                </div>
+
+                <div 
+                  className="metric-card theme-blue" 
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => setActiveTab('export')}
+                  title="Click to view Execution & Export Center"
+                >
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-blue)' }}>READY TO EXPORT</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-blue)', color: 'var(--color-blue)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">{exportSummary?.pending_export_count || 0}</div>
+                  <div className="metric-footer">
+                    {exportSummary?.exported_count ? `${exportSummary.exported_count} already exported` : 'Firewall-cleared commitments'}
+                  </div>
                 </div>
               </div>
 
@@ -928,6 +1056,25 @@ export default function App() {
                                     🛡️ Firewall: Blocked
                                   </span>
                                 )}
+
+                                {/* Execution Status Badge */}
+                                {item.execution_status === 'exported' ? (
+                                  <span className="badge-execution exported" title={`Dispatched downstream at ${item.exported_at || ''}`}>
+                                    🚀 Exported
+                                  </span>
+                                ) : isApproved ? (
+                                  <span className="badge-execution ready" title="Firewall passed — Ready for execution dispatch">
+                                    ⚡ Ready for Export
+                                  </span>
+                                ) : isRejected ? (
+                                  <span className="badge-execution rejected" title="Firewall blocked — Item rejected">
+                                    🚫 Blocked
+                                  </span>
+                                ) : (
+                                  <span className="badge-execution blocked" title="Firewall blocked — Approval required before execution">
+                                    🔒 Blocked
+                                  </span>
+                                )}
                               </div>
                             </div>
 
@@ -1189,6 +1336,27 @@ export default function App() {
                                           </svg>
                                           <span>Edit Item</span>
                                         </button>
+
+                                        {item.execution_status !== 'exported' ? (
+                                          <button
+                                            type="button"
+                                            className="btn-export-action"
+                                            onClick={() => handleExportSingleItem(item.task_id)}
+                                            disabled={isItemLoading}
+                                            title="Dispatch this approved commitment to downstream execution"
+                                          >
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                                              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                                              <polyline points="7 10 12 15 17 10" />
+                                              <line x1="12" y1="15" x2="12" y2="3" />
+                                            </svg>
+                                            <span>{isItemLoading ? 'Exporting...' : 'Export'}</span>
+                                          </button>
+                                        ) : (
+                                          <span style={{ fontSize: '0.75rem', color: 'var(--color-blue)', fontWeight: 600 }}>
+                                            🚀 Exported {item.exported_at ? new Date(item.exported_at).toLocaleDateString() : ''}
+                                          </span>
+                                        )}
                                       </div>
                                       <span style={{ fontSize: '0.75rem', color: 'var(--color-green)', fontWeight: 500 }}>
                                         ✓ Approved &amp; Firewall Eligible
@@ -1311,6 +1479,335 @@ export default function App() {
                       })}
                     </div>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 6: EXECUTION & EXPORT CENTER */}
+          {activeTab === 'export' && (
+            <div className="feature-workspace-container">
+              <div className="export-center-container">
+                {/* Hero Explanation Banner */}
+                <div className="export-hero-banner">
+                  <div className="export-hero-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="export-hero-title">Deterministic Commitment Firewall Execution &amp; Export</h2>
+                    <p className="export-hero-desc">
+                      Downstream task creation and pipeline exports are deterministically protected by the Commitment Firewall.
+                      Only human-approved commitments with verbatim transcript evidence can cross the execution boundary.
+                      Unreviewed (<span style={{ color: 'var(--color-blue)', fontWeight: 600 }}>pending</span>) or rejected items are strictly blocked.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Export Pipeline Metrics Grid */}
+                <div className="export-metrics-grid">
+                  <div className="export-metric-card">
+                    <div>
+                      <div className="export-metric-val" style={{ color: 'var(--color-green)' }}>
+                        {exportSummary?.pending_export_count || 0}
+                      </div>
+                      <div className="export-metric-label">Ready for Export</div>
+                      <div className="export-metric-desc">Approved commitments cleared by firewall awaiting execution</div>
+                    </div>
+                    <div className="export-metric-icon ready">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="export-metric-card">
+                    <div>
+                      <div className="export-metric-val" style={{ color: 'var(--color-blue)' }}>
+                        {exportSummary?.exported_count || 0}
+                      </div>
+                      <div className="export-metric-label">Exported to Pipeline</div>
+                      <div className="export-metric-desc">Confirmed commitments successfully dispatched downstream</div>
+                    </div>
+                    <div className="export-metric-icon exported">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="export-metric-card">
+                    <div>
+                      <div className="export-metric-val" style={{ color: 'var(--color-red)' }}>
+                        {exportSummary?.blocked_firewall_count || 0}
+                      </div>
+                      <div className="export-metric-label">Blocked by Firewall</div>
+                      <div className="export-metric-desc">Unapproved or rejected items protected from premature execution</div>
+                    </div>
+                    <div className="export-metric-icon blocked">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <div className="export-metric-card">
+                    <div>
+                      <div className="export-metric-val" style={{ color: 'var(--color-lavender)' }}>
+                        {exportSummary?.approved_count || 0}
+                      </div>
+                      <div className="export-metric-label">Total Approved</div>
+                      <div className="export-metric-desc">Human-verified commitments recorded in workspace</div>
+                    </div>
+                    <div className="export-metric-icon total">
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                      </svg>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Firewall Blocked Alert Notification if any */}
+                {exportBlockedItems.length > 0 && (
+                  <div className="export-blocked-alert">
+                    <div className="export-blocked-alert-header">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                      <span>Commitment Firewall Enforcement: {exportBlockedItems.length} items were blocked from execution</span>
+                    </div>
+                    <ul className="export-blocked-list">
+                      {exportBlockedItems.map((b) => (
+                        <li key={b.task_id}>
+                          <strong>Task {b.task_id}:</strong> {b.reason === 'approval_pending' ? 'Item is pending human approval' : b.reason === 'item_rejected' ? 'Item was explicitly rejected' : b.reason}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* Execution Actions Toolbar */}
+                <div className="export-actions-card">
+                  <div className="export-actions-info">
+                    <h3 className="export-actions-title">Pipeline Actions</h3>
+                    <p className="export-actions-subtitle">
+                      Export structured records with full audit traceability or dispatch approved commitments.
+                    </p>
+                  </div>
+
+                  <div className="export-actions-group">
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-secondary saas-btn-sm"
+                      onClick={() => handleDownloadCsv()}
+                      title="Download audit-ready CSV of all approved commitments"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="7 10 12 15 17 10" />
+                        <line x1="12" y1="15" x2="12" y2="3" />
+                      </svg>
+                      <span>Download CSV</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-secondary saas-btn-sm"
+                      onClick={() => handleDownloadJson()}
+                      title="Download structured JSON payload with full decision-to-execution traceability"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="16 18 22 12 16 6" />
+                        <polyline points="8 6 2 12 8 18" />
+                      </svg>
+                      <span>Download JSON</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-primary saas-btn-sm"
+                      onClick={handleDispatchBatchExport}
+                      disabled={isExporting || (exportSummary?.pending_export_count || 0) === 0}
+                      title="Dispatch all firewall-cleared commitments to downstream execution"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="22" y1="2" x2="11" y2="13" />
+                        <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                      </svg>
+                      <span>
+                        {isExporting 
+                          ? 'Dispatching...' 
+                          : `Dispatch All Ready (${exportSummary?.pending_export_count || 0})`}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Auditable Traceability Table */}
+                <div className="export-table-card">
+                  <div className="export-table-header-bar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <h3 className="export-table-title">Traceability &amp; Execution Pipeline Table</h3>
+                      <span className="count-pill">{actionItems.filter(i => i.category === 'commitment').length} Commitments</span>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      RFC 4180 / JSON Schema Compliant
+                    </span>
+                  </div>
+
+                  <div className="export-table-wrapper">
+                    {actionItems.filter(i => i.category === 'commitment').length === 0 ? (
+                      <div className="saas-empty-state" style={{ padding: '2.5rem' }}>
+                        <p className="empty-state-desc">No commitments found in workspace. Extract commitments from meetings first.</p>
+                      </div>
+                    ) : (
+                      <table className="export-table">
+                        <thead>
+                          <tr>
+                            <th>Firewall Gate</th>
+                            <th>Commitment</th>
+                            <th>Meeting</th>
+                            <th>Owner</th>
+                            <th>Deadline</th>
+                            <th>Transcript Evidence</th>
+                            <th>Execution Status</th>
+                            <th>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {actionItems
+                            .filter((i) => i.category === 'commitment')
+                            .map((item) => {
+                              const meeting = meetingMap.get(item.meeting_id);
+                              const isApproved = item.approval_status === 'approved';
+                              const isExported = item.execution_status === 'exported';
+
+                              return (
+                                <tr key={item.task_id}>
+                                  <td>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                      {isApproved ? (
+                                        <span className="badge-approval approved" style={{ fontSize: '0.7rem' }}>
+                                          ✓ Approved
+                                        </span>
+                                      ) : item.approval_status === 'rejected' ? (
+                                        <span className="badge-approval rejected" style={{ fontSize: '0.7rem' }}>
+                                          ✕ Rejected
+                                        </span>
+                                      ) : (
+                                        <span className="badge-approval pending" style={{ fontSize: '0.7rem' }}>
+                                          ⏳ Pending
+                                        </span>
+                                      )}
+
+                                      {isApproved ? (
+                                        <span className="badge-firewall eligible" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
+                                          🛡️ Cleared
+                                        </span>
+                                      ) : (
+                                        <span className="badge-firewall blocked" style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem' }}>
+                                          🛡️ Blocked
+                                        </span>
+                                      )}
+                                    </div>
+                                  </td>
+
+                                  <td>
+                                    <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.2rem' }}>
+                                      {item.title}
+                                    </div>
+                                    {item.description && item.description !== item.title && (
+                                      <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', maxWidth: '280px' }}>
+                                        {item.description}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    <span style={{ fontWeight: 500 }}>
+                                      {meeting ? meeting.title : item.meeting_id}
+                                    </span>
+                                  </td>
+
+                                  <td>
+                                    {item.owner ? (
+                                      <span style={{ fontWeight: 600 }}>{item.owner}</span>
+                                    ) : (
+                                      <span style={{ color: 'var(--color-amber)', fontStyle: 'italic' }}>Unassigned</span>
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    {item.due_date ? (
+                                      <span>{item.due_date}</span>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)' }}>No date</span>
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    {item.source_text ? (
+                                      <div 
+                                        className="export-evidence-cell" 
+                                        title={item.source_text}
+                                      >
+                                        "{item.source_text}"
+                                      </div>
+                                    ) : (
+                                      <span style={{ color: 'var(--text-muted)' }}>—</span>
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    {isExported ? (
+                                      <span className="badge-execution exported">
+                                        🚀 Exported
+                                      </span>
+                                    ) : isApproved ? (
+                                      <span className="badge-execution ready">
+                                        ⚡ Ready
+                                      </span>
+                                    ) : (
+                                      <span className="badge-execution blocked">
+                                        🔒 Blocked
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td>
+                                    {isExported ? (
+                                      <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                        {item.exported_at ? new Date(item.exported_at).toLocaleDateString() : 'Done'}
+                                      </span>
+                                    ) : isApproved ? (
+                                      <button
+                                        type="button"
+                                        className="btn-export-action"
+                                        onClick={() => handleExportSingleItem(item.task_id)}
+                                        disabled={actionLoadingId === item.task_id}
+                                        style={{ padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+                                      >
+                                        <span>{actionLoadingId === item.task_id ? '...' : 'Export'}</span>
+                                      </button>
+                                    ) : (
+                                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                                        Approve First
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>

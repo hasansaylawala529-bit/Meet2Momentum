@@ -7,58 +7,57 @@ Meet2Momentum is an AI-powered meeting-to-execution automation system built for 
 
 ---
 
-## Phase 3 Scope & Status
+## Phase 4 Scope & Status
 
-This repository is at **Phase 3: Human Approval and Commitment Firewall**.
+This repository is at **Phase 4: Execution & Export Engine (Option A)**.
 
 ### Core Principle
 > **"AI proposes. Humans approve. The system enforces."**
 
-The Gemini AI extraction engine proposes decisions and action items from transcripts, but no AI-proposed item may enter downstream execution without explicit human review and deterministic validation.
+The Gemini AI extraction engine proposes decisions and action items from transcripts. The human reviewer evaluates, refines, and approves or rejects items. The deterministic backend Commitment Firewall enforces that **only verified, human-approved commitments can ever be dispatched for downstream execution or exported**.
 
 ---
 
-### What Works in Phase 3:
+### What Works in Phase 4:
 
-#### 1. Human Review & Approval Workflow
-- **Initial State**: All newly extracted action items from Phase 2 initialize with `approval_status = "pending"`.
-- **Allowed State Transitions**:
-  - `pending` &rarr; `approved` (via `POST /api/action-items/{task_id}/approve`)
-  - `pending` &rarr; `rejected` (via `POST /api/action-items/{task_id}/reject`)
-- **Strict Transition Enforcement**: Only items in `pending` status may transition to `approved` or `rejected`. Direct transitions between `approved` and `rejected`, or re-approving an already `approved` item, are rejected by the backend with HTTP 400 (`FirewallValidationError`).
-- **Category Invariance**: Approving an exploratory `suggestion` or an `unresolved_question` marks it `approved`, but never mutates its semantic category into a `commitment`.
+#### 1. Deterministic Firewall Gating on Downstream Execution
+- **Server-Side Enforcement**: The export engine (`backend/app/services/exporter.py`) verifies the Commitment Firewall on every candidate item. No client assertions are trusted.
+- **Strict Block Rules**: Any commitment in `pending` review status or `rejected` status is deterministically blocked from export and downstream task creation.
+- **Explicit Firewall Error Signals**: Attempting to export an unapproved item directly via `POST /api/action-items/{task_id}/export` raises a `FirewallValidationError` returning HTTP 400 with a descriptive reason (`approval_pending` or `item_rejected`).
 
-#### 2. Material Edit Rule (Automatic Re-Approval)
-- Users can edit an action item's `title`, `description`, `owner`, or `due_date` via `PATCH /api/action-items/{task_id}`.
-- If an item was previously `approved` and any material field (`title`, `description`, `owner`, `due_date`) is modified, the backend **automatically resets its status to `pending`** (`approval_status = "pending"`).
-- This prevents execution of altered commitments without renewed human oversight.
+#### 2. Full Decision-to-Execution Traceability Exports
+- **RFC 4180 CSV Export (`GET /api/export/csv`)**:
+  - Fully quoted and escaped tabular export suitable for Excel, Google Sheets, or project import.
+  - Columns: `Task ID`, `Meeting ID`, `Meeting Title`, `Meeting Date`, `Category`, `Title`, `Description`, `Assigned Owner`, `Deadline`, `Approval Status`, `Evidence Grounded`, `Verbatim Evidence Excerpt`, `Execution Status`, `Exported At`.
+- **Structured JSON Traceability Payload (`GET /api/export/json`)**:
+  - Full schema-compliant JSON array containing parent meeting metadata, verbatim evidence citations, human approval state, and execution timestamps.
+  - Optional `meeting_id` query parameter for scoped exports.
 
-#### 3. Deterministic Backend Commitment Firewall
-- **Server-Side Verification**: The firewall service (`backend/app/services/firewall.py`) never trusts client-supplied approval assertions; it inspects persisted SQLite state.
-- **Eligibility Evaluation (`evaluate_commitment_firewall`)**:
-  - **`eligible = True`** (`firewall_status = "eligible"`): Requires `approval_status == "approved"`, non-empty `task_id`, and non-empty `title`.
-  - **`eligible = False`** (`firewall_status = "blocked"`):
-    - Block reason `"approval_pending"` if item is in `pending` review.
-    - Block reason `"item_rejected"` if item was rejected by human reviewer.
-    - Block reason `"missing_required_information"` if required fields are missing.
-- **Firewall Inspection Endpoints**:
-  - `GET /api/action-items/{task_id}/firewall`: Evaluates a single item's firewall status.
-  - `GET /api/action-items/firewall/evaluations`: Evaluates all action items in bulk.
+#### 3. Execution State Tracking & Dispatch Endpoints
+- **Execution Lifecycle**: Items transition from `execution_status = "not_exported"` to `execution_status = "exported"`.
+- **Exported Timestamp**: `exported_at` records the exact UTC ISO-8601 timestamp of downstream dispatch.
+- **Batch Dispatch Endpoint (`POST /api/export/dispatch`)**:
+  - Evaluates all eligible approved commitments (or a specific array of `task_ids`).
+  - Dispatches eligible items and updates their database records atomically.
+  - Returns `dispatched_count`, `exported_items`, and `blocked_items` (with exact firewall block reasons).
+- **Single Item Dispatch (`POST /api/action-items/{task_id}/export`)**:
+  - Dispatches an individual approved commitment.
+- **Summary Metrics Endpoint (`GET /api/export/summary`)**:
+  - Returns real-time counts for `total_commitments`, `approved_count`, `pending_export_count`, `exported_count`, and `blocked_firewall_count`.
 
-#### 4. Frontend Review, Edit & Firewall UI
-- **Action Items Workspace**:
-  - **Dual Filter Toolbars**: Filter by Category (`All`, `Commitments`, `Suggestions`, `Unresolved Questions`) and Approval Status (`All`, `Pending Review`, `Approved`, `Rejected`).
-  - **Approval Badges**: Color-coded badges for `⏳ Pending Review` (Pale Blue), `✓ Approved` (Pale Mint/Green), and `✕ Rejected` (Pale Red).
-  - **Firewall Status Badges**: `🛡️ Firewall: Eligible` for approved items; `🛡️ Firewall: Blocked` for pending/rejected items.
-  - **Review Action Bar**: For pending items, provides quick-action buttons for "Approve", "Reject" (with inline confirmation prompt), and "Edit".
-  - **Inline Editing Mode**: Clean in-place editing form for title, description, owner, and deadline, with an explicit warning hint if editing an approved item.
-- **Overview Metrics**: Added a dedicated "PENDING REVIEW" metric card and refined "CONFIRMED COMMITMENTS" with a human approval count.
+#### 4. Frontend Execution & Export Center (Tab 6)
+- **Dedicated Navigation**: Added `Execution & Export` workspace tab with dynamic badge count of ready-to-export commitments.
+- **Summary Metrics Cards**: High-visibility cards displaying *Ready for Export* (Mint/Green), *Exported to Pipeline* (Pale Blue), *Blocked by Firewall* (Pale Red), and *Total Approved* (Lavender).
+- **One-Click Actions Toolbar**: Direct downloads for audit-ready CSV, structured JSON, and batch "Dispatch All Ready" button with real-time feedback.
+- **Interactive Traceability Table**: Clean data table showing each commitment's firewall status, meeting origin, assigned owner, deadline, transcript evidence quote, execution badge, and direct export trigger.
+- **Card-Level Badges**: Action items in the workspace display execution badges (`⚡ Ready for Export`, `🚀 Exported`, `🔒 Blocked`) and direct "Export" action buttons for approved items.
 
 ---
 
-### Deliberately Deferred to Later Phases:
-- Execution sync to external tools (GitHub Issues, Trello, Jira) (Phase 4).
-- CSV/JSON export and reporting workflows (Phase 5).
+### Previous Phase Deliverables (Preserved & Active):
+- **Phase 1 Foundations**: Structured SQLite database, meeting capture, validation models, Colorful Professional Light Theme UI.
+- **Phase 2 Gemini AI Extraction**: Ground-truth evidence verification, decision extraction, action item classification (`commitment`, `suggestion`, `unresolved_question`), hallucination protection.
+- **Phase 3 Human Approval & Firewall**: Strict status transitions (`pending` &rarr; `approved`/`rejected`), material edit automatic re-approval reset, deterministic backend Commitment Firewall.
 
 
 ---
@@ -94,15 +93,19 @@ Meet2Momentum/
 │   │   ├── services/
 │   │   │   ├── __init__.py
 │   │   │   ├── extractor.py                        # Gemini extraction & ground-truth validation
-│   │   │   └── firewall.py                         # Commitment Firewall & approval logic
+│   │   │   ├── firewall.py                         # Commitment Firewall & approval logic
+│   │   │   └── exporter.py                         # Traceability CSV/JSON builder & dispatch engine
 │   │   └── routers/
 │   │       ├── __init__.py
 │   │       ├── meetings.py                         # Transcript ingestion, extraction & outcomes
-│   │       └── outcomes.py                         # Action item review, editing, firewall & decisions
+│   │       ├── outcomes.py                         # Action item review, editing, firewall & decisions
+│   │       └── export.py                           # CSV/JSON exports & batch execution dispatch
 │   ├── tests/
 │   │   ├── __init__.py
-│   │   ├── test_phase1.py                          # 10 automated test suites
-│   │   └── test_phase2.py                          # Phase 2 test suite
+│   │   ├── test_phase1.py                          # 10 automated test suites (Foundations)
+│   │   ├── test_phase2.py                          # 8 automated test suites (Gemini AI Extraction)
+│   │   ├── test_phase3.py                          # 12 automated test suites (Approval & Firewall)
+│   │   └── test_phase4.py                          # 8 automated test suites (Execution & Export)
 │   └── data/                                       # SQLite runtime data (ignored)
 │       └── meet2momentum.db
 └── frontend/
@@ -189,6 +192,11 @@ The backend API endpoints:
 - Action Item Material Edit: `PATCH /api/action-items/{task_id}`
 - Single Item Firewall Check: `GET /api/action-items/{task_id}/firewall`
 - Bulk Firewall Evaluations: `GET /api/action-items/firewall/evaluations`
+- Single Item Export Dispatch: `POST /api/action-items/{task_id}/export`
+- Batch Export Dispatch: `POST /api/export/dispatch`
+- Audit-Ready CSV Export: `GET /api/export/csv?meeting_id=`
+- Structured JSON Traceability Export: `GET /api/export/json?meeting_id=`
+- Export Summary Metrics: `GET /api/export/summary`
 - Interactive Swagger Docs: `http://127.0.0.1:8000/docs`
 
 ---
@@ -213,7 +221,7 @@ The frontend application will be live at:
 
 ---
 
-### 5. Meeting Workflow: Capture, Extract & Review
+### 5. Complete Workflow: Meeting to Execution Pipeline
 
 1. **Capture Meeting:** In the **Meetings** workspace, paste meeting notes, choose a demo preset, or upload a `.txt` file, then click **Save Meeting Record**.
 2. **AI Extraction:** On any saved meeting card, click **Process with AI** (or **Re-extract Outcomes**). The backend securely sends the saved transcript to Gemini AI with strict extraction schemas.
@@ -225,19 +233,25 @@ The frontend application will be live at:
    - **Reject**: Transitions status to `rejected`, setting `🛡️ Firewall: Blocked (Rejected)`.
    - **Material Edit**: If an already `approved` item's title, description, owner, or deadline is modified, the backend automatically resets its status to `pending`, requiring human re-approval.
    - **Firewall Gate**: The deterministic Commitment Firewall verifies database state server-side to guarantee that no unapproved, rejected, or incomplete item can proceed to downstream execution.
+7. **Downstream Execution & Traceability Export (Phase 4):**
+   - In the **Execution & Export** tab, view workspace metrics: *Ready for Export*, *Exported to Pipeline*, *Blocked by Firewall*, and *Total Approved*.
+   - **Audit-Ready CSV**: Download complete tabular records with verbatim evidence quotes and meeting metadata.
+   - **Structured JSON**: Export fully grounded traceability records.
+   - **Batch Execution Dispatch**: Click **Dispatch All Ready** to transition eligible commitments to `exported` and record UTC `exported_at` timestamps. Unapproved items are protected and reported with deterministic block reasons.
+   - **Single Item Dispatch**: Directly trigger execution for individual approved commitments from either the Action Items card or the Traceability Table.
 
 ---
 
 ### 6. Testing & Quality Assurance
 
-All 30 automated backend test suites and the frontend production build have been executed and verified:
+All 38 automated backend test suites and the frontend production build have been executed and verified:
 
 ```powershell
 # Run backend pytest suite (from backend/ directory)
 pytest -v
 ```
 
-**Results:** `30 passed in 2.79s`
+**Results:** `38 passed in 3.38s`
 - **Phase 1 Foundations (10 tests)**: Health endpoints, meeting persistence, whitespace rejection, category and approval enum validations, SQLite schema idempotency.
 - **Phase 2 Gemini AI Extraction (8 tests)**: Exact and normalized whitespace evidence verification, raw model validations, transactional re-extraction safety, workspace retrieval endpoints.
 - **Phase 3 Human Approval & Firewall (12 tests)**:
@@ -252,13 +266,22 @@ pytest -v
   - Bulk Commitment Firewall evaluation endpoint.
   - Filtering action items by `approval_status`.
   - 404 handling for non-existent items.
+- **Phase 4 Execution & Export Engine (8 tests)**:
+  - RFC 4180 CSV export generation containing only firewall-cleared commitments with verbatim quote evidence.
+  - Structured JSON export schema validation with complete meeting and transcript traceability.
+  - Batch export dispatch transitions `execution_status` to `exported` and records `exported_at` timestamp.
+  - Commitment Firewall deterministic blocking of unapproved (`pending`) items during batch dispatch with explicit reasons.
+  - Single action item export dispatch for approved items (`POST /api/action-items/{task_id}/export`).
+  - Commitment Firewall HTTP 400 error rejection when attempting to export unapproved or rejected single items.
+  - 404 handling on non-existent item export.
+  - Real-time export summary metrics calculation (`GET /api/export/summary`).
 
 ```powershell
 # Verify frontend production build (from frontend/ directory)
 npm run build
 ```
 
-**Build Output:** Production bundle compiled cleanly in 1.50s without errors (`dist/index.html`, `dist/assets/index-*.css`, `dist/assets/index-*.js`).
+**Build Output:** Production bundle compiled cleanly in 1.40s without errors (`dist/index.html`, `dist/assets/index-*.css`, `dist/assets/index-*.js`).
 
 ---
 

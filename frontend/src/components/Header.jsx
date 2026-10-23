@@ -64,6 +64,19 @@ const WORKSPACE_METADATA = {
         <path d="M13.73 21a2 2 0 0 1-3.46 0" />
       </svg>
     )
+  },
+  export: {
+    title: 'Execution & Export',
+    subtitle: 'Firewall-gated downstream execution, batch dispatch, and traceability export',
+    iconBg: 'var(--bg-pale-blue)',
+    iconColor: 'var(--color-blue)',
+    icon: (
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="7 10 12 15 17 10" />
+        <line x1="12" y1="15" x2="12" y2="3" />
+      </svg>
+    )
   }
 };
 

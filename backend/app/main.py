@@ -5,6 +5,7 @@ from app.config import FRONTEND_ORIGINS
 from app.database import init_db
 from app.routers.meetings import router as meetings_router
 from app.routers.outcomes import decisions_router, action_items_router
+from app.routers.export import router as export_router, action_export_router
 
 
 @asynccontextmanager
@@ -26,7 +27,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=FRONTEND_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
@@ -34,6 +35,8 @@ app.add_middleware(
 app.include_router(meetings_router)
 app.include_router(decisions_router)
 app.include_router(action_items_router)
+app.include_router(export_router)
+app.include_router(action_export_router)
 
 
 

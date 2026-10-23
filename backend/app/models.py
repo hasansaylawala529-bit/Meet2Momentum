@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -95,6 +95,7 @@ class ActionItem(BaseModel):
     approval_status: ApprovalStatus = ApprovalStatus.PENDING
     execution_status: ExecutionStatus = ExecutionStatus.NOT_EXPORTED
     task_status: TaskStatus = TaskStatus.PENDING
+    exported_at: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -174,4 +175,60 @@ class FirewallEvaluationResult(BaseModel):
     block_reason: Optional[str] = Field(None, description="'approval_pending', 'item_rejected', 'missing_required_information', 'invalid_item'")
     reasons: List[str] = Field(default_factory=list, description="Descriptive list of firewall evaluation points")
     checked_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+# --- Phase 4: Execution & Export Models ---
+
+class ExportDispatchBatchRequest(BaseModel):
+    task_ids: Optional[List[str]] = Field(None, description="Specific task IDs to export. If omitted, exports all currently firewall-eligible items.")
+
+
+class BlockedExportItem(BaseModel):
+    task_id: str
+    title: str
+    block_reason: str
+    reasons: List[str] = Field(default_factory=list)
+
+
+class ExportDispatchResult(BaseModel):
+    dispatched_count: int
+    blocked_count: int
+    exported_task_ids: List[str]
+    blocked_items: List[BlockedExportItem] = Field(default_factory=list)
+    exported_at: str
+
+
+class ExportSummary(BaseModel):
+    total_items: int
+    total_commitments: int
+    approved_count: int
+    firewall_eligible_count: int
+    exported_count: int
+    pending_export_count: int
+    blocked_count: int
+    last_exported_at: Optional[str] = None
+
+
+class ExportRecord(BaseModel):
+    task_id: str
+    meeting_id: str
+    meeting_title: str
+    meeting_date: Optional[str] = None
+    category: str
+    title: str
+    description: Optional[str] = None
+    owner: Optional[str] = None
+    due_date: Optional[str] = None
+    approval_status: str
+    evidence_verified: bool
+    source_text: Optional[str] = None
+    execution_status: str
+    exported_at: Optional[str] = None
+
+
+class ExportJsonResponse(BaseModel):
+    export_timestamp: str
+    total_exported: int
+    items: List[ExportRecord]
+
 

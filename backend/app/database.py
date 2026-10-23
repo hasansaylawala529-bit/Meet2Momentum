@@ -35,6 +35,8 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE action_items ADD COLUMN clarification_note TEXT;")
     if "evidence_verified" not in action_cols:
         cursor.execute("ALTER TABLE action_items ADD COLUMN evidence_verified INTEGER NOT NULL DEFAULT 1;")
+    if "exported_at" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN exported_at TEXT;")
 
 
 def init_db(db_path: Optional[str] = None) -> None:
@@ -88,6 +90,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                     approval_status TEXT NOT NULL DEFAULT 'pending',
                     execution_status TEXT NOT NULL DEFAULT 'not_exported',
                     task_status TEXT NOT NULL DEFAULT 'pending',
+                    exported_at TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (meeting_id) REFERENCES meetings (meeting_id) ON DELETE CASCADE
                 );
@@ -330,6 +333,7 @@ def update_action_item(
         "approval_status",
         "execution_status",
         "task_status",
+        "exported_at",
     }
 
     set_clauses = []
@@ -360,4 +364,64 @@ def update_action_item(
         return get_action_item(task_id, db_path=db_path)
     finally:
         conn.close()
+
+
+def mark_action_item_exported(
+    task_id: str,
+    exported_at: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Transition an action item's execution_status to 'exported' with an explicit timestamp."""
+    timestamp = exported_at or datetime.now(timezone.utc).isoformat()
+    return update_action_item(
+        task_id=task_id,
+        fields={
+            "execution_status": "exported",
+            "exported_at": timestamp,
+        },
+        db_path=db_path
+    )
+
+
+def get_export_summary(db_path: Optional[str] = None) -> Dict[str, Any]:
+    """Retrieve workspace-level execution and export summary metrics."""
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items")
+        total_items = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items WHERE category = 'commitment'")
+        total_commitments = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items WHERE approval_status = 'approved'")
+        approved_count = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items WHERE execution_status = 'exported'")
+        exported_count = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items WHERE approval_status = 'approved' AND execution_status != 'exported'")
+        pending_export_count = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT COUNT(*) as cnt FROM action_items WHERE approval_status != 'approved'")
+        blocked_count = cursor.fetchone()["cnt"]
+
+        cursor.execute("SELECT MAX(exported_at) as last_exp FROM action_items WHERE exported_at IS NOT NULL")
+        last_row = cursor.fetchone()
+        last_exported_at = last_row["last_exp"] if (last_row and last_row["last_exp"]) else None
+
+        return {
+            "total_items": total_items,
+            "total_commitments": total_commitments,
+            "approved_count": approved_count,
+            "firewall_eligible_count": approved_count,
+            "exported_count": exported_count,
+            "pending_export_count": pending_export_count,
+            "blocked_count": blocked_count,
+            "last_exported_at": last_exported_at,
+        }
+    finally:
+        conn.close()
+
 
