@@ -96,6 +96,9 @@ class ActionItem(BaseModel):
     execution_status: ExecutionStatus = ExecutionStatus.NOT_EXPORTED
     task_status: TaskStatus = TaskStatus.PENDING
     exported_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    is_overdue: bool = False
+    schedule_status: Optional[str] = None
     created_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
@@ -230,5 +233,38 @@ class ExportJsonResponse(BaseModel):
     export_timestamp: str
     total_exported: int
     items: List[ExportRecord]
+
+
+# --- Phase 5: Tracking & Accountability Schemas ---
+
+class TaskStatusUpdateRequest(BaseModel):
+    task_status: TaskStatus = Field(..., description="Target progress status: 'pending', 'in_progress', 'completed'")
+    note: Optional[str] = Field(None, description="Optional transition note or rationale")
+
+
+class TaskHistoryEntry(BaseModel):
+    history_id: str
+    task_id: str
+    event_type: str = Field(..., description="'extracted', 'approved', 'rejected', 'edited', 'exported', 'status_changed'")
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    details: Optional[str] = None
+    created_at: str
+
+
+class TrackingDashboardResponse(BaseModel):
+    total_items: int
+    total_commitments: int
+    completed_count: int
+    in_progress_count: int
+    pending_count: int
+    overdue_count: int
+    due_soon_count: int
+    unassigned_owner_count: int
+    completion_rate_percent: float
+    overdue_items: List[Dict[str, Any]]
+    unassigned_items: List[Dict[str, Any]]
+    recent_history: List[TaskHistoryEntry]
+
 
 

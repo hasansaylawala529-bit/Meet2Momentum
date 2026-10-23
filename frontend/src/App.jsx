@@ -17,6 +17,10 @@ import {
   exportSingleActionItem,
   downloadExportCsv,
   downloadExportJson,
+  fetchTrackingDashboard,
+  fetchWorkspaceAuditLog,
+  fetchTaskHistory,
+  updateTaskProgress,
 } from './services/api';
 
 export default function App() {
@@ -41,6 +45,7 @@ export default function App() {
   const [globalNotice, setGlobalNotice] = useState(null);
   const [activeActionCategory, setActiveActionCategory] = useState('all');
   const [actionApprovalFilter, setActionApprovalFilter] = useState('all');
+  const [taskProgressFilter, setTaskProgressFilter] = useState('all');
   const [editingTaskId, setEditingTaskId] = useState(null);
   const [editFormData, setEditFormData] = useState({
     title: '',
@@ -55,6 +60,13 @@ export default function App() {
   const [exportSummary, setExportSummary] = useState(null);
   const [isExporting, setIsExporting] = useState(false);
   const [exportBlockedItems, setExportBlockedItems] = useState([]);
+
+  // Phase 5: Tracking & Accountability States
+  const [trackingData, setTrackingData] = useState(null);
+  const [historyModalTask, setHistoryModalTask] = useState(null);
+  const [selectedTaskHistory, setSelectedTaskHistory] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [updatingProgressTaskId, setUpdatingProgressTaskId] = useState(null);
 
   // Fast meeting lookup map
   const meetingMap = useMemo(() => {
@@ -107,17 +119,28 @@ export default function App() {
     }
   }, []);
 
+  const loadTrackingData = useCallback(async () => {
+    try {
+      const tracking = await fetchTrackingDashboard();
+      setTrackingData(tracking);
+    } catch (err) {
+      console.error('Failed to load tracking dashboard:', err);
+    }
+  }, []);
+
   const loadOutcomesData = useCallback(async () => {
     setIsLoadingOutcomes(true);
     try {
-      const [decisionsData, actionsData, summaryData] = await Promise.all([
+      const [decisionsData, actionsData, summaryData, tracking] = await Promise.all([
         fetchDecisions(),
         fetchActionItems(),
         fetchExportSummary().catch(() => null),
+        fetchTrackingDashboard().catch(() => null),
       ]);
       setDecisions(decisionsData);
       setActionItems(actionsData);
       if (summaryData) setExportSummary(summaryData);
+      if (tracking) setTrackingData(tracking);
     } catch (err) {
       console.error('Failed to load meeting outcomes:', err);
     } finally {
@@ -358,16 +381,66 @@ export default function App() {
     }
   };
 
-  // Filtered Action Items by Category AND Approval Status
+  // Phase 5: Progress Update & History Handlers
+  const handleUpdateTaskProgress = async (taskId, newStatus, note = null) => {
+    setUpdatingProgressTaskId(taskId);
+    try {
+      const updated = await updateTaskProgress(taskId, newStatus, note);
+      setActionItems((prev) =>
+        prev.map((item) => (item.task_id === taskId ? updated : item))
+      );
+      loadTrackingData();
+      loadExportSummaryData();
+      const statusLabel = newStatus === 'in_progress' ? 'In Progress' : newStatus === 'completed' ? 'Completed' : 'Pending';
+      setGlobalNotice({
+        type: 'success',
+        message: `Task progress updated to "${statusLabel}". Transition recorded in audit history.`,
+      });
+    } catch (err) {
+      setGlobalNotice({
+        type: 'error',
+        message: err.message || 'Failed to update task progress.',
+      });
+    } finally {
+      setUpdatingProgressTaskId(null);
+    }
+  };
+
+  const handleOpenTaskHistory = async (task) => {
+    setHistoryModalTask(task);
+    setIsLoadingHistory(true);
+    try {
+      const history = await fetchTaskHistory(task.task_id);
+      setSelectedTaskHistory(history);
+    } catch (err) {
+      console.error('Failed to load task history:', err);
+      setSelectedTaskHistory([]);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  const handleCloseTaskHistory = () => {
+    setHistoryModalTask(null);
+    setSelectedTaskHistory([]);
+  };
+
+  // Filtered Action Items by Category, Approval Status, AND Execution Progress
   const filteredActionItems = useMemo(() => {
     return actionItems.filter((i) => {
       const matchesCategory =
         activeActionCategory === 'all' || i.category === activeActionCategory;
       const matchesApproval =
         actionApprovalFilter === 'all' || i.approval_status === actionApprovalFilter;
-      return matchesCategory && matchesApproval;
+      const matchesProgress =
+        taskProgressFilter === 'all'
+          ? true
+          : taskProgressFilter === 'overdue'
+          ? Boolean(i.is_overdue)
+          : (i.task_status || 'pending') === taskProgressFilter;
+      return matchesCategory && matchesApproval && matchesProgress;
     });
-  }, [actionItems, activeActionCategory, actionApprovalFilter]);
+  }, [actionItems, activeActionCategory, actionApprovalFilter, taskProgressFilter]);
 
   // Derived counts for overview metrics & filters
   const confirmedCommitmentsCount = useMemo(() => {
@@ -392,6 +465,10 @@ export default function App() {
     return actionItems.filter((i) => i.approval_status === 'rejected').length;
   }, [actionItems]);
 
+  const overdueItemsCount = useMemo(() => {
+    return trackingData?.overdue_count ?? actionItems.filter((i) => i.is_overdue).length;
+  }, [trackingData, actionItems]);
+
   const followUpsList = useMemo(() => {
     return actionItems.filter(
       (i) => i.category === 'unresolved_question' || i.clarification_required
@@ -409,6 +486,7 @@ export default function App() {
         actionCount={actionItems.length}
         followupCount={followUpsList.length}
         exportCount={exportSummary?.pending_export_count || 0}
+        overdueCount={overdueItemsCount}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
@@ -956,6 +1034,57 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Phase 5: Execution Progress Filter Toolbar */}
+                  <div className="filter-toolbar" style={{ marginTop: '0.5rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--border-color)' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                        Execution Progress:
+                      </span>
+                      <div className="filter-pills-cluster">
+                        <button
+                          type="button"
+                          className={`filter-pill ${taskProgressFilter === 'all' ? 'active' : ''}`}
+                          onClick={() => setTaskProgressFilter('all')}
+                        >
+                          All ({actionItems.length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${taskProgressFilter === 'pending' ? 'active' : ''}`}
+                          onClick={() => setTaskProgressFilter('pending')}
+                        >
+                          Pending ({actionItems.filter((i) => (i.task_status || 'pending') === 'pending').length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${taskProgressFilter === 'in_progress' ? 'active theme-blue' : ''}`}
+                          onClick={() => setTaskProgressFilter('in_progress')}
+                        >
+                          In Progress ({actionItems.filter((i) => i.task_status === 'in_progress').length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${taskProgressFilter === 'completed' ? 'active theme-green' : ''}`}
+                          onClick={() => setTaskProgressFilter('completed')}
+                        >
+                          Completed ({actionItems.filter((i) => i.task_status === 'completed').length})
+                        </button>
+                        <button
+                          type="button"
+                          className={`filter-pill ${taskProgressFilter === 'overdue' ? 'active' : ''}`}
+                          style={taskProgressFilter === 'overdue' ? { backgroundColor: 'var(--bg-pale-red)', color: 'var(--color-red)', borderColor: 'var(--border-red)' } : {}}
+                          onClick={() => setTaskProgressFilter('overdue')}
+                        >
+                          ⚠️ Overdue ({overdueItemsCount})
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '0.775rem', color: 'var(--color-lavender)', fontWeight: 500 }}>
+                      Completion Rate: <strong>{trackingData ? `${trackingData.completion_rate_percent}%` : 'Calculating...'}</strong>
+                    </div>
+                  </div>
+
                   {filteredActionItems.length === 0 ? (
                     <div className="saas-empty-state">
                       <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
@@ -1075,6 +1204,36 @@ export default function App() {
                                     🔒 Blocked
                                   </span>
                                 )}
+
+                                {/* Phase 5: Progress Status Badge */}
+                                {item.task_status === 'completed' ? (
+                                  <span className="progress-status-badge completed" title={`Completed at ${item.completed_at ? new Date(item.completed_at).toLocaleString() : ''}`}>
+                                    ✓ Completed
+                                  </span>
+                                ) : item.task_status === 'in_progress' ? (
+                                  <span className="progress-status-badge in_progress" title="Execution in progress">
+                                    ⚙️ In Progress
+                                  </span>
+                                ) : (
+                                  <span className="progress-status-badge pending" title="Task pending execution">
+                                    ⏸️ Pending
+                                  </span>
+                                )}
+
+                                {/* Phase 5: Schedule & Overdue Intelligence Badge */}
+                                {item.task_status === 'completed' ? null : item.is_overdue ? (
+                                  <span className="badge-schedule overdue" title="Deadline is in the past">
+                                    ⚠️ Overdue
+                                  </span>
+                                ) : item.schedule_status === 'due_soon' ? (
+                                  <span className="badge-schedule due-soon" title="Deadline is within 48 hours">
+                                    ⏳ Due Soon
+                                  </span>
+                                ) : item.due_date ? (
+                                  <span className="badge-schedule on-track" title="Deadline is scheduled">
+                                    📅 On Track
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
 
@@ -1369,6 +1528,57 @@ export default function App() {
                                       ✕ Rejected by Reviewer • Blocked by Firewall
                                     </span>
                                   )}
+                                </div>
+
+                                {/* Phase 5: Task Progress Control & Audit Trail Bar */}
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '0.75rem', paddingTop: '0.65rem', borderTop: '1px dashed var(--border-color)', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    <span style={{ fontSize: '0.725rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+                                      Progress:
+                                    </span>
+                                    <div className="progress-switcher">
+                                      <button
+                                        type="button"
+                                        className={`progress-btn ${(item.task_status || 'pending') === 'pending' ? 'active pending' : ''}`}
+                                        onClick={() => handleUpdateTaskProgress(item.task_id, 'pending')}
+                                        disabled={updatingProgressTaskId === item.task_id}
+                                        title="Mark task as pending"
+                                      >
+                                        Pending
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`progress-btn ${item.task_status === 'in_progress' ? 'active in_progress' : ''}`}
+                                        onClick={() => handleUpdateTaskProgress(item.task_id, 'in_progress')}
+                                        disabled={updatingProgressTaskId === item.task_id}
+                                        title="Mark task as in progress"
+                                      >
+                                        In Progress
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className={`progress-btn ${item.task_status === 'completed' ? 'active completed' : ''}`}
+                                        onClick={() => handleUpdateTaskProgress(item.task_id, 'completed')}
+                                        disabled={updatingProgressTaskId === item.task_id}
+                                        title="Mark task as completed"
+                                      >
+                                        ✓ Completed
+                                      </button>
+                                    </div>
+                                  </div>
+
+                                  <button
+                                    type="button"
+                                    className="btn-history-action"
+                                    onClick={() => handleOpenTaskHistory(item)}
+                                    title="View chronological lifecycle audit trail"
+                                  >
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <polyline points="12 6 12 12 14 14" />
+                                    </svg>
+                                    <span>Audit History</span>
+                                  </button>
                                 </div>
                               </>
                             )}
@@ -1808,6 +2018,396 @@ export default function App() {
                       </table>
                     )}
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 7: EXECUTION TRACKING & ACCOUNTABILITY */}
+          {activeTab === 'tracking' && (
+            <div className="feature-workspace-container">
+              <div className="export-center-container">
+                {/* Hero Banner */}
+                <div className="export-hero-banner" style={{ borderLeft: '4px solid var(--color-lavender)' }}>
+                  <div className="export-hero-icon" style={{ backgroundColor: 'var(--bg-pale-lavender)', color: 'var(--color-lavender)' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="20" x2="18" y2="10" />
+                      <line x1="12" y1="20" x2="12" y2="4" />
+                      <line x1="6" y1="20" x2="6" y2="14" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h2 className="export-hero-title">Execution Tracking &amp; Accountability Intelligence</h2>
+                    <p className="export-hero-desc">
+                      Real-time visibility into commitment delivery, intelligent deadline evaluation, overdue task detection, unassigned ownership triage, and tamper-evident audit history across all meeting outcomes.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Tracking KPI Metric Cards */}
+                <div className="tracking-kpi-grid">
+                  {/* Completion Rate */}
+                  <div className="tracking-kpi-card accent-rate">
+                    <div className="tracking-kpi-header">
+                      <span className="tracking-kpi-label">Completion Rate</span>
+                      <div className="tracking-kpi-icon-box" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="tracking-kpi-value" style={{ color: 'var(--color-green)' }}>
+                      {trackingData ? `${trackingData.completion_rate_percent}%` : '0%'}
+                    </div>
+                    <div className="tracking-kpi-subtext">
+                      {trackingData?.completed_count || 0} of {trackingData?.total_commitments || 0} commitments completed
+                    </div>
+                    <div className="progress-bar-container">
+                      <div
+                        className="progress-bar-fill"
+                        style={{ width: `${Math.min(100, trackingData?.completion_rate_percent || 0)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Total Commitments */}
+                  <div className="tracking-kpi-card accent-commitments">
+                    <div className="tracking-kpi-header">
+                      <span className="tracking-kpi-label">Commitments</span>
+                      <div className="tracking-kpi-icon-box" style={{ backgroundColor: 'var(--bg-pale-blue)', color: 'var(--color-blue)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 11l3 3L22 4" />
+                          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="tracking-kpi-value">
+                      {trackingData?.total_commitments || 0}
+                    </div>
+                    <div className="tracking-kpi-subtext">
+                      {trackingData?.total_items || 0} total action items recorded
+                    </div>
+                  </div>
+
+                  {/* In Progress */}
+                  <div className="tracking-kpi-card accent-progress">
+                    <div className="tracking-kpi-header">
+                      <span className="tracking-kpi-label">In Progress</span>
+                      <div className="tracking-kpi-icon-box" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="tracking-kpi-value" style={{ color: 'var(--color-teal)' }}>
+                      {trackingData?.in_progress_count || 0}
+                    </div>
+                    <div className="tracking-kpi-subtext">
+                      Active execution underway
+                    </div>
+                  </div>
+
+                  {/* Overdue */}
+                  <div className="tracking-kpi-card accent-overdue">
+                    <div className="tracking-kpi-header">
+                      <span className="tracking-kpi-label">Overdue</span>
+                      <div className="tracking-kpi-icon-box" style={{ backgroundColor: 'var(--bg-pale-red)', color: 'var(--color-red)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="tracking-kpi-value" style={{ color: 'var(--color-red)' }}>
+                      {trackingData?.overdue_count || 0}
+                    </div>
+                    <div className="tracking-kpi-subtext">
+                      {trackingData?.due_soon_count ? `${trackingData.due_soon_count} due within 48h` : 'Requires delivery attention'}
+                    </div>
+                  </div>
+
+                  {/* Unassigned */}
+                  <div className="tracking-kpi-card accent-unassigned">
+                    <div className="tracking-kpi-header">
+                      <span className="tracking-kpi-label">Unassigned</span>
+                      <div className="tracking-kpi-icon-box" style={{ backgroundColor: 'var(--bg-pale-amber)', color: 'var(--color-amber)' }}>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                          <circle cx="8.5" cy="7" r="4" />
+                          <line x1="20" y1="8" x2="20" y2="14" />
+                          <line x1="23" y1="11" x2="17" y2="11" />
+                        </svg>
+                      </div>
+                    </div>
+                    <div className="tracking-kpi-value" style={{ color: 'var(--color-amber)' }}>
+                      {trackingData?.unassigned_owner_count || 0}
+                    </div>
+                    <div className="tracking-kpi-subtext">
+                      Commitments without owner
+                    </div>
+                  </div>
+                </div>
+
+                {/* Intelligence Sections: Overdue & Unassigned */}
+                <div className="tracking-sections-grid">
+                  {/* Overdue Attention Panel */}
+                  <div className="tracking-panel" style={{ borderTop: '3px solid var(--color-red)' }}>
+                    <div className="tracking-panel-header">
+                      <div className="tracking-panel-title-group">
+                        <span style={{ color: 'var(--color-red)' }}>⚠️</span>
+                        <h3 className="tracking-panel-title">Overdue Commitments</h3>
+                      </div>
+                      <span className="badge-schedule overdue">
+                        {trackingData?.overdue_items?.length || 0} Attention Needed
+                      </span>
+                    </div>
+
+                    <div className="tracking-panel-body">
+                      {(!trackingData?.overdue_items || trackingData.overdue_items.length === 0) ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ fontSize: '1.75rem', display: 'block', marginBottom: '0.4rem' }}>🎉</span>
+                          <strong style={{ color: 'var(--color-green)' }}>No Overdue Commitments!</strong>
+                          <p style={{ fontSize: '0.8rem', marginTop: '0.2rem' }}>All active commitments are currently on track or completed.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          {trackingData.overdue_items.map((item) => (
+                            <div key={item.task_id} className="attention-item-row" style={{ borderLeft: '3px solid var(--color-red)' }}>
+                              <div className="attention-item-info">
+                                <div className="attention-item-title">{item.title}</div>
+                                <div className="attention-item-meta">
+                                  <span>👤 {item.owner || 'Unassigned'}</span>
+                                  <span>📅 Due: <strong>{item.due_date || 'Past'}</strong></span>
+                                  <span style={{ color: 'var(--color-red)', fontWeight: 600 }}>
+                                    {item.days_overdue} {item.days_overdue === 1 ? 'day' : 'days'} overdue
+                                  </span>
+                                </div>
+                              </div>
+                              <div style={{ display: 'flex', gap: '0.35rem', flexShrink: 0 }}>
+                                <button
+                                  type="button"
+                                  className="attention-action-btn"
+                                  style={{ color: 'var(--color-teal)' }}
+                                  onClick={() => handleUpdateTaskProgress(item.task_id, 'in_progress')}
+                                  title="Mark In Progress"
+                                >
+                                  In Progress
+                                </button>
+                                <button
+                                  type="button"
+                                  className="attention-action-btn"
+                                  style={{ color: 'var(--color-green)', fontWeight: 600 }}
+                                  onClick={() => handleUpdateTaskProgress(item.task_id, 'completed')}
+                                  title="Mark Completed"
+                                >
+                                  ✓ Done
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Unassigned Commitments Attention Panel */}
+                  <div className="tracking-panel" style={{ borderTop: '3px solid var(--color-amber)' }}>
+                    <div className="tracking-panel-header">
+                      <div className="tracking-panel-title-group">
+                        <span style={{ color: 'var(--color-amber)' }}>👤</span>
+                        <h3 className="tracking-panel-title">Unassigned Commitments</h3>
+                      </div>
+                      <span className="badge-schedule due-soon">
+                        {trackingData?.unassigned_items?.length || 0} Need Owner
+                      </span>
+                    </div>
+
+                    <div className="tracking-panel-body">
+                      {(!trackingData?.unassigned_items || trackingData.unassigned_items.length === 0) ? (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-secondary)' }}>
+                          <span style={{ fontSize: '1.75rem', display: 'block', marginBottom: '0.4rem' }}>✓</span>
+                          <strong style={{ color: 'var(--color-green)' }}>All Commitments Assigned</strong>
+                          <p style={{ fontSize: '0.8rem', marginTop: '0.2rem' }}>Every confirmed commitment in the workspace has a designated owner.</p>
+                        </div>
+                      ) : (
+                        <div>
+                          {trackingData.unassigned_items.map((item) => (
+                            <div key={item.task_id} className="attention-item-row" style={{ borderLeft: '3px solid var(--color-amber)' }}>
+                              <div className="attention-item-info">
+                                <div className="attention-item-title">{item.title}</div>
+                                <div className="attention-item-meta">
+                                  <span style={{ color: 'var(--color-amber)', fontWeight: 600 }}>⚠️ Owner missing</span>
+                                  {item.due_date && <span>📅 Deadline: {item.due_date}</span>}
+                                  <span>Status: {item.task_status}</span>
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                className="attention-action-btn"
+                                onClick={() => {
+                                  setActiveTab('actions');
+                                  const original = actionItems.find((a) => a.task_id === item.task_id);
+                                  if (original) handleStartEdit(original);
+                                }}
+                                title="Assign an owner to this commitment"
+                              >
+                                Assign Owner →
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Workspace-Wide Audit Trail Activity Log */}
+                <div className="export-table-card">
+                  <div className="export-table-header-bar">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <h3 className="export-table-title">Recent Workspace Audit Trail Activity</h3>
+                      <span className="count-pill">{trackingData?.recent_history?.length || 0} Events</span>
+                    </div>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                      Immutable Lifecycle Event Log
+                    </span>
+                  </div>
+
+                  <div className="export-table-wrapper">
+                    {(!trackingData?.recent_history || trackingData.recent_history.length === 0) ? (
+                      <div className="saas-empty-state" style={{ padding: '2.5rem' }}>
+                        <p className="empty-state-desc">No audit log records found yet.</p>
+                      </div>
+                    ) : (
+                      <table className="activity-feed-table">
+                        <thead>
+                          <tr>
+                            <th>Event</th>
+                            <th>Task ID</th>
+                            <th>Details &amp; Transition</th>
+                            <th>Timestamp</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {trackingData.recent_history.map((event) => (
+                            <tr key={event.history_id}>
+                              <td>
+                                <span className={`history-event-badge ${event.event_type}`}>
+                                  {event.event_type.replace('_', ' ')}
+                                </span>
+                              </td>
+                              <td>
+                                <span style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                  {event.task_id}
+                                </span>
+                              </td>
+                              <td>
+                                <div>
+                                  <span style={{ fontSize: '0.8125rem', color: 'var(--text-main)' }}>
+                                    {event.details || 'Lifecycle state updated'}
+                                  </span>
+                                  {event.old_value && event.new_value && (
+                                    <div className="history-transition-tag">
+                                      <span>{event.old_value}</span>
+                                      <span>→</span>
+                                      <strong style={{ color: 'var(--color-blue)' }}>{event.new_value}</strong>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                              <td>
+                                <span style={{ fontSize: '0.725rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                                  {new Date(event.created_at).toLocaleString()}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Task History Modal Dialog */}
+          {historyModalTask && (
+            <div className="history-modal-overlay" onClick={handleCloseTaskHistory}>
+              <div className="history-modal-dialog" onClick={(e) => e.stopPropagation()}>
+                <div className="history-modal-header">
+                  <div className="history-modal-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--color-lavender)' }}>
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 14 14" />
+                    </svg>
+                    <span>Task Lifecycle Audit Trail</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="history-modal-close"
+                    onClick={handleCloseTaskHistory}
+                    aria-label="Close modal"
+                  >
+                    &times;
+                  </button>
+                </div>
+
+                <div className="history-modal-body">
+                  <div style={{ marginBottom: '1.25rem', paddingBottom: '0.75rem', borderBottom: '1px solid var(--border-color)' }}>
+                    <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-main)', marginBottom: '0.35rem' }}>
+                      {historyModalTask.title}
+                    </h3>
+                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                      <span className="count-pill" style={{ fontSize: '0.7rem' }}>ID: {historyModalTask.task_id}</span>
+                      <span className={`progress-status-badge ${historyModalTask.task_status || 'pending'}`}>
+                        {historyModalTask.task_status || 'pending'}
+                      </span>
+                      <span className={`badge-approval ${historyModalTask.approval_status}`}>
+                        {historyModalTask.approval_status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {isLoadingHistory ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                      Loading task audit trail...
+                    </div>
+                  ) : selectedTaskHistory.length === 0 ? (
+                    <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-secondary)' }}>
+                      No history events recorded for this task yet.
+                    </div>
+                  ) : (
+                    <div className="history-timeline">
+                      {selectedTaskHistory.map((item) => (
+                        <div key={item.history_id} className="history-timeline-item">
+                          <div className={`history-timeline-marker ${item.event_type}`} />
+                          <div className="history-timeline-content">
+                            <div className="history-timeline-header">
+                              <span className={`history-event-badge ${item.event_type}`}>
+                                {item.event_type.replace('_', ' ')}
+                              </span>
+                              <span className="history-time-stamp">
+                                {new Date(item.created_at).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="history-details-text">
+                              {item.details || 'Lifecycle transition recorded.'}
+                            </p>
+                            {item.old_value && item.new_value && (
+                              <div className="history-transition-tag">
+                                <span>{item.old_value}</span>
+                                <span>→</span>
+                                <strong style={{ color: 'var(--color-blue)' }}>{item.new_value}</strong>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

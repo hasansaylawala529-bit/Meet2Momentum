@@ -59,7 +59,17 @@ def export_json_endpoint(
 ):
     try:
         records = build_export_records(meeting_id=meeting_id, only_eligible=only_eligible)
-        return generate_commitments_json(records)
+        data = generate_commitments_json(records)
+        filename = f"meet2momentum_commitments_{meeting_id}.json" if meeting_id else "meet2momentum_commitments.json"
+        json_str = data.model_dump_json(indent=2)
+        return Response(
+            content=json_str,
+            media_type="application/json",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"',
+                "Content-Type": "application/json; charset=utf-8",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate JSON export: {str(e)}")
 

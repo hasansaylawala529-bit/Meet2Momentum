@@ -2271,5 +2271,571 @@ html, body {
   color: var(--text-secondary);
 }
 
+/* ==========================================================================
+   Phase 5: Execution Tracking, Progress Status, Audit Trail & Accountability
+   ========================================================================== */
+
+/* Progress Status Badge & Switcher */
+.progress-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  letter-spacing: 0.02em;
+}
+
+.progress-status-badge.pending {
+  background-color: #F1F5F9;
+  color: #475569;
+  border: 1px solid #CBD5E1;
+}
+
+.progress-status-badge.in_progress {
+  background-color: var(--bg-pale-blue);
+  color: var(--color-blue);
+  border: 1px solid var(--border-blue);
+}
+
+.progress-status-badge.completed {
+  background-color: var(--bg-pale-mint);
+  color: var(--color-green);
+  border: 1px solid var(--border-green);
+}
+
+/* Interactive Progress Segmented Switcher */
+.progress-switcher {
+  display: inline-flex;
+  align-items: center;
+  background-color: #F1F5F9;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+
+.progress-btn {
+  border: none;
+  background: transparent;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.725rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  line-height: 1;
+}
+
+.progress-btn:hover:not(:disabled) {
+  color: var(--text-main);
+  background-color: rgba(255, 255, 255, 0.7);
+}
+
+.progress-btn.active.pending {
+  background-color: #FFFFFF;
+  color: #475569;
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.progress-btn.active.in_progress {
+  background-color: #FFFFFF;
+  color: var(--color-blue);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.progress-btn.active.completed {
+  background-color: #FFFFFF;
+  color: var(--color-green);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+/* Schedule & Overdue Intelligence Badges */
+.badge-schedule {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.badge-schedule.overdue {
+  background-color: var(--bg-pale-red);
+  color: var(--color-red);
+  border: 1px solid var(--border-red);
+  animation: subtle-pulse 2s infinite ease-in-out;
+}
+
+.badge-schedule.due-soon {
+  background-color: var(--bg-pale-amber);
+  color: var(--color-amber);
+  border: 1px solid var(--border-amber);
+}
+
+.badge-schedule.on-track {
+  background-color: var(--bg-pale-teal);
+  color: var(--color-teal);
+  border: 1px solid var(--border-teal);
+}
+
+.badge-schedule.completed {
+  background-color: var(--bg-pale-mint);
+  color: var(--color-green);
+  border: 1px solid var(--border-green);
+}
+
+@keyframes subtle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.82; }
+}
+
+/* History Trigger Button */
+.btn-history-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.65rem;
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-history-action:hover {
+  background-color: var(--bg-pale-lavender);
+  color: var(--color-lavender);
+  border-color: var(--border-lavender);
+}
+
+/* Audit History Modal & Timeline */
+.history-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(3px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.history-modal-dialog {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  width: 100%;
+  max-width: 620px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScaleIn 0.2s ease-out;
+}
+
+@keyframes modalScaleIn {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.history-modal-header {
+  padding: 1.15rem 1.35rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #FAFAFA;
+}
+
+.history-modal-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.history-modal-close {
+  background: transparent;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.history-modal-close:hover {
+  background-color: var(--border-subtle);
+  color: var(--text-main);
+}
+
+.history-modal-body {
+  padding: 1.25rem 1.35rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* History Timeline Structure */
+.history-timeline {
+  position: relative;
+  padding-left: 1.75rem;
+}
+
+.history-timeline::before {
+  content: '';
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.55rem;
+  width: 2px;
+  background: var(--border-color);
+}
+
+.history-timeline-item {
+  position: relative;
+  margin-bottom: 1.25rem;
+}
+
+.history-timeline-item:last-child {
+  margin-bottom: 0;
+}
+
+.history-timeline-marker {
+  position: absolute;
+  left: -1.75rem;
+  top: 0.2rem;
+  width: 1.15rem;
+  height: 1.15rem;
+  border-radius: 50%;
+  background-color: #FFFFFF;
+  border: 2px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+
+.history-timeline-marker.extracted { border-color: var(--color-blue); background-color: var(--bg-pale-blue); }
+.history-timeline-marker.approved { border-color: var(--color-green); background-color: var(--bg-pale-mint); }
+.history-timeline-marker.rejected { border-color: var(--color-red); background-color: var(--bg-pale-red); }
+.history-timeline-marker.edited { border-color: var(--color-amber); background-color: var(--bg-pale-amber); }
+.history-timeline-marker.exported { border-color: var(--color-lavender); background-color: var(--bg-pale-lavender); }
+.history-timeline-marker.status_changed { border-color: var(--color-teal); background-color: var(--bg-pale-teal); }
+
+.history-timeline-content {
+  background-color: #F8FAFC;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+}
+
+.history-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.35rem;
+}
+
+.history-event-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+.history-event-badge.extracted { background-color: var(--bg-pale-blue); color: var(--color-blue); }
+.history-event-badge.approved { background-color: var(--bg-pale-mint); color: var(--color-green); }
+.history-event-badge.rejected { background-color: var(--bg-pale-red); color: var(--color-red); }
+.history-event-badge.edited { background-color: var(--bg-pale-amber); color: var(--color-amber); }
+.history-event-badge.exported { background-color: var(--bg-pale-lavender); color: var(--color-lavender); }
+.history-event-badge.status_changed { background-color: var(--bg-pale-teal); color: var(--color-teal); }
+
+.history-time-stamp {
+  font-size: 0.725rem;
+  color: var(--text-muted);
+}
+
+.history-details-text {
+  font-size: 0.8125rem;
+  color: var(--text-main);
+  line-height: 1.4;
+}
+
+.history-transition-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.4rem;
+  font-size: 0.725rem;
+  color: var(--text-secondary);
+  background-color: #FFFFFF;
+  border: 1px solid var(--border-color);
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+}
+
+/* ==========================================================================
+   Tracking & Accountability Dashboard Styles
+   ========================================================================== */
+
+/* KPI Grid */
+.tracking-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.tracking-kpi-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 1.15rem 1.25rem;
+  box-shadow: var(--shadow-card);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.tracking-kpi-card.accent-rate { border-top: 3px solid var(--color-green); }
+.tracking-kpi-card.accent-commitments { border-top: 3px solid var(--color-blue); }
+.tracking-kpi-card.accent-progress { border-top: 3px solid var(--color-teal); }
+.tracking-kpi-card.accent-overdue { border-top: 3px solid var(--color-red); }
+.tracking-kpi-card.accent-unassigned { border-top: 3px solid var(--color-amber); }
+
+.tracking-kpi-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.tracking-kpi-label {
+  font-size: 0.775rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.tracking-kpi-icon-box {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tracking-kpi-value {
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.1;
+  margin-bottom: 0.25rem;
+}
+
+.tracking-kpi-subtext {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* Completion Rate Progress Gauge */
+.progress-bar-container {
+  width: 100%;
+  height: 8px;
+  background-color: #E2E8F0;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin-top: 0.6rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-teal), var(--color-green));
+  border-radius: 9999px;
+  transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Intelligence Sections Layout */
+.tracking-sections-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+@media (max-width: 960px) {
+  .tracking-sections-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.tracking-panel {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tracking-panel-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #FFFFFF;
+}
+
+.tracking-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.tracking-panel-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.tracking-panel-body {
+  padding: 1rem 1.25rem;
+  flex: 1;
+}
+
+/* Attention List Item */
+.attention-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  background-color: #FFFFFF;
+  margin-bottom: 0.65rem;
+  transition: all 0.15s ease;
+}
+
+.attention-item-row:last-child {
+  margin-bottom: 0;
+}
+
+.attention-item-row:hover {
+  border-color: #CBD5E1;
+  background-color: #F8FAFC;
+}
+
+.attention-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.attention-item-title {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 0.15rem;
+}
+
+.attention-item-meta {
+  font-size: 0.735rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.attention-action-btn {
+  border: 1px solid var(--border-color);
+  background-color: #FFFFFF;
+  color: var(--text-main);
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.725rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.attention-action-btn:hover {
+  background-color: var(--bg-pale-blue);
+  color: var(--color-blue);
+  border-color: var(--border-blue);
+}
+
+/* Activity Feed Table in Dashboard */
+.activity-feed-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.activity-feed-table th {
+  background-color: #F8FAFC;
+  padding: 0.65rem 0.9rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--border-color);
+  text-align: left;
+}
+
+.activity-feed-table td {
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--border-color);
+  vertical-align: middle;
+  color: var(--text-main);
+}
+
+.activity-feed-table tr:last-child td {
+  border-bottom: none;
+}
+
+.activity-feed-table tr:hover td {
+  background-color: #F8FAFC;
+}
+
+
 
 

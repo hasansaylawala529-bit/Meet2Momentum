@@ -8,7 +8,7 @@ from app.models import (
     ApprovalStatus,
     FirewallEvaluationResult,
 )
-from app.database import get_action_item, update_action_item
+from app.database import get_action_item, update_action_item, log_task_history
 
 
 class FirewallValidationError(Exception):
@@ -74,6 +74,16 @@ def approve_action_item(
     if not updated:
         raise ItemNotFoundError(task_id)
 
+    note_detail = f"Approved by human reviewer{f': {note.strip()}' if note and note.strip() else ''}"
+    log_task_history(
+        task_id=task_id,
+        event_type="approved",
+        old_value=current_status,
+        new_value=ApprovalStatus.APPROVED.value,
+        details=note_detail,
+        db_path=db_path
+    )
+
     return ActionItem(**updated)
 
 
@@ -122,6 +132,16 @@ def reject_action_item(
     updated = update_action_item(task_id, updates, db_path=db_path)
     if not updated:
         raise ItemNotFoundError(task_id)
+
+    rejection_detail = f"Rejected by human reviewer{f': {note.strip()}' if note and note.strip() else ''}"
+    log_task_history(
+        task_id=task_id,
+        event_type="rejected",
+        old_value=current_status,
+        new_value=ApprovalStatus.REJECTED.value,
+        details=rejection_detail,
+        db_path=db_path
+    )
 
     return ActionItem(**updated)
 
@@ -178,6 +198,19 @@ def edit_action_item(
     updated = update_action_item(task_id, fields_to_update, db_path=db_path)
     if not updated:
         raise ItemNotFoundError(task_id)
+
+    if fields_to_update:
+        mod_fields = list(fields_to_update.keys())
+        is_reset = fields_to_update.get("approval_status") == ApprovalStatus.PENDING.value
+        edit_detail = f"Fields modified: {', '.join(mod_fields)}" + (" (Material edit reset status to pending review)" if is_reset else "")
+        log_task_history(
+            task_id=task_id,
+            event_type="edited",
+            old_value=current_status,
+            new_value=fields_to_update.get("approval_status", current_status),
+            details=edit_detail,
+            db_path=db_path
+        )
 
     return ActionItem(**updated)
 

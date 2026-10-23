@@ -37,6 +37,8 @@ def _migrate_columns(conn: sqlite3.Connection) -> None:
         cursor.execute("ALTER TABLE action_items ADD COLUMN evidence_verified INTEGER NOT NULL DEFAULT 1;")
     if "exported_at" not in action_cols:
         cursor.execute("ALTER TABLE action_items ADD COLUMN exported_at TEXT;")
+    if "completed_at" not in action_cols:
+        cursor.execute("ALTER TABLE action_items ADD COLUMN completed_at TEXT;")
 
 
 def init_db(db_path: Optional[str] = None) -> None:
@@ -91,8 +93,23 @@ def init_db(db_path: Optional[str] = None) -> None:
                     execution_status TEXT NOT NULL DEFAULT 'not_exported',
                     task_status TEXT NOT NULL DEFAULT 'pending',
                     exported_at TEXT,
+                    completed_at TEXT,
                     created_at TEXT NOT NULL,
                     FOREIGN KEY (meeting_id) REFERENCES meetings (meeting_id) ON DELETE CASCADE
+                );
+            """)
+
+            # 4. Task History / Audit Trail Table
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS task_history (
+                    history_id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    old_value TEXT,
+                    new_value TEXT,
+                    details TEXT,
+                    created_at TEXT NOT NULL,
+                    FOREIGN KEY (task_id) REFERENCES action_items (task_id) ON DELETE CASCADE
                 );
             """)
 
@@ -190,7 +207,9 @@ def save_extraction_results(
                 )
 
             # 3. Insert new action items
+            # 3. Insert new action items & initial audit event
             for a in action_items:
+                created_ts = a.get("created_at", datetime.now(timezone.utc).isoformat())
                 conn.execute(
                     """
                     INSERT INTO action_items (
@@ -219,7 +238,22 @@ def save_extraction_results(
                         a.get("approval_status", "pending"),
                         a.get("execution_status", "not_exported"),
                         a.get("task_status", "pending"),
-                        a.get("created_at", datetime.now(timezone.utc).isoformat())
+                        created_ts
+                    )
+                )
+                conn.execute(
+                    """
+                    INSERT INTO task_history (history_id, task_id, event_type, old_value, new_value, details, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        f"hist_{uuid.uuid4().hex[:12]}",
+                        a["task_id"],
+                        "extracted",
+                        None,
+                        "pending",
+                        f"Extracted from transcript as '{a['category']}'",
+                        created_ts
                     )
                 )
     finally:
@@ -334,6 +368,7 @@ def update_action_item(
         "execution_status",
         "task_status",
         "exported_at",
+        "completed_at",
     }
 
     set_clauses = []
@@ -373,7 +408,7 @@ def mark_action_item_exported(
 ) -> Optional[Dict[str, Any]]:
     """Transition an action item's execution_status to 'exported' with an explicit timestamp."""
     timestamp = exported_at or datetime.now(timezone.utc).isoformat()
-    return update_action_item(
+    updated = update_action_item(
         task_id=task_id,
         fields={
             "execution_status": "exported",
@@ -381,6 +416,16 @@ def mark_action_item_exported(
         },
         db_path=db_path
     )
+    if updated:
+        log_task_history(
+            task_id=task_id,
+            event_type="exported",
+            old_value="not_exported",
+            new_value="exported",
+            details=f"Dispatched downstream at {timestamp}",
+            db_path=db_path
+        )
+    return updated
 
 
 def get_export_summary(db_path: Optional[str] = None) -> Dict[str, Any]:
@@ -423,5 +468,108 @@ def get_export_summary(db_path: Optional[str] = None) -> Dict[str, Any]:
         }
     finally:
         conn.close()
+
+
+def log_task_history(
+    task_id: str,
+    event_type: str,
+    old_value: Optional[str] = None,
+    new_value: Optional[str] = None,
+    details: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """Record an audit trail event for a task."""
+    history_id = f"hist_{uuid.uuid4().hex[:12]}"
+    created_at = datetime.now(timezone.utc).isoformat()
+    conn = get_db_connection(db_path)
+    try:
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO task_history (history_id, task_id, event_type, old_value, new_value, details, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (history_id, task_id, event_type, old_value, new_value, details, created_at)
+            )
+        return {
+            "history_id": history_id,
+            "task_id": task_id,
+            "event_type": event_type,
+            "old_value": old_value,
+            "new_value": new_value,
+            "details": details,
+            "created_at": created_at,
+        }
+    finally:
+        conn.close()
+
+
+def get_task_history(task_id: str, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve all historical audit events for a task ordered by time ascending."""
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM task_history WHERE task_id = ? ORDER BY created_at ASC",
+            (task_id,)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def list_all_history(limit: int = 50, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve recent workspace-wide audit events ordered by time descending."""
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM task_history ORDER BY created_at DESC LIMIT ?",
+            (limit,)
+        )
+        return [dict(r) for r in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def update_action_item_progress(
+    task_id: str,
+    new_status: str,
+    note: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Update a task's task_status ('pending', 'in_progress', 'completed').
+    If completed, records completed_at timestamp; otherwise clears it if moved back.
+    Logs the transition to task_history.
+    """
+    existing = get_action_item(task_id, db_path=db_path)
+    if not existing:
+        return None
+
+    old_status = existing.get("task_status", "pending")
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    fields_to_update: Dict[str, Any] = {
+        "task_status": new_status,
+    }
+    if new_status == "completed":
+        fields_to_update["completed_at"] = now_iso
+    elif old_status == "completed" and new_status != "completed":
+        fields_to_update["completed_at"] = None
+
+    updated = update_action_item(task_id, fields_to_update, db_path=db_path)
+    if updated:
+        detail_msg = f"Progress updated to '{new_status}'" + (f": {note}" if note else "")
+        log_task_history(
+            task_id=task_id,
+            event_type="status_changed",
+            old_value=old_status,
+            new_value=new_status,
+            details=detail_msg,
+            db_path=db_path,
+        )
+    return updated
+
 
 

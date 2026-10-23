@@ -6,6 +6,7 @@ from app.database import init_db
 from app.routers.meetings import router as meetings_router
 from app.routers.outcomes import decisions_router, action_items_router
 from app.routers.export import router as export_router, action_export_router
+from app.routers.tracking import tracking_router, action_tracking_router
 
 
 @asynccontextmanager
@@ -37,6 +38,8 @@ app.include_router(decisions_router)
 app.include_router(action_items_router)
 app.include_router(export_router)
 app.include_router(action_export_router)
+app.include_router(tracking_router)
+app.include_router(action_tracking_router)
 
 
 

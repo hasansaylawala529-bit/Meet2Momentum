@@ -367,20 +367,27 @@ export async function downloadExportCsv(meetingId = null) {
     ? `${API_BASE_URL}/api/export/csv?meeting_id=${encodeURIComponent(meetingId)}`
     : `${API_BASE_URL}/api/export/csv`;
 
+  const filename = meetingId ? `meet2momentum_commitments_${meetingId}.csv` : 'meet2momentum_commitments.csv';
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to download CSV export (Status: ${res.status})`);
   }
 
-  const blob = await res.blob();
+  const text = await res.text();
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
   const downloadUrl = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
+  a.style.display = 'none';
   a.href = downloadUrl;
-  a.download = meetingId ? `meet2momentum_commitments_${meetingId}.csv` : 'meet2momentum_commitments.csv';
+  a.setAttribute('download', filename);
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(downloadUrl);
+  setTimeout(() => {
+    try {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch {}
+  }, 1500);
 }
 
 /**
@@ -391,20 +398,113 @@ export async function downloadExportJson(meetingId = null) {
     ? `${API_BASE_URL}/api/export/json?meeting_id=${encodeURIComponent(meetingId)}`
     : `${API_BASE_URL}/api/export/json`;
 
+  const filename = meetingId ? `meet2momentum_commitments_${meetingId}.json` : 'meet2momentum_commitments.json';
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to download JSON export (Status: ${res.status})`);
   }
 
-  const blob = await res.blob();
+  const text = await res.text();
+  const blob = new Blob([text], { type: 'application/json;charset=utf-8;' });
   const downloadUrl = window.URL.createObjectURL(blob);
   const a = document.createElement('a');
+  a.style.display = 'none';
   a.href = downloadUrl;
-  a.download = meetingId ? `meet2momentum_commitments_${meetingId}.json` : 'meet2momentum_commitments.json';
+  a.setAttribute('download', filename);
   document.body.appendChild(a);
   a.click();
-  document.body.removeChild(a);
-  window.URL.revokeObjectURL(downloadUrl);
+  setTimeout(() => {
+    try {
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(downloadUrl);
+    } catch {}
+  }, 1500);
 }
+
+/**
+ * Fetch workspace-wide tracking and accountability metrics
+ */
+export async function fetchTrackingDashboard() {
+  const res = await fetch(`${API_BASE_URL}/api/tracking/dashboard`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to retrieve tracking dashboard metrics.');
+  }
+
+  return await res.json();
+}
+
+/**
+ * Fetch workspace-wide audit log
+ */
+export async function fetchWorkspaceAuditLog(limit = 50) {
+  const res = await fetch(`${API_BASE_URL}/api/tracking/audit-log?limit=${limit}`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to retrieve workspace audit log.');
+  }
+
+  return await res.json();
+}
+
+/**
+ * Fetch complete audit lifecycle history for a single action item
+ */
+export async function fetchTaskHistory(taskId) {
+  if (!taskId) throw new Error('Task ID is required to fetch history.');
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/history`, {
+    method: 'GET',
+    headers: { 'Accept': 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Failed to retrieve task history for '${taskId}'.`);
+  }
+
+  return await res.json();
+}
+
+/**
+ * Update task execution progress status (pending, in_progress, completed)
+ */
+export async function updateTaskProgress(taskId, taskStatus, note = null) {
+  if (!taskId) throw new Error('Task ID is required.');
+  if (!['pending', 'in_progress', 'completed'].includes(taskStatus)) {
+    throw new Error("Invalid task status. Must be 'pending', 'in_progress', or 'completed'.");
+  }
+
+  const payload = { task_status: taskStatus };
+  if (note && note.trim()) payload.note = note.trim();
+
+  const res = await fetch(`${API_BASE_URL}/api/action-items/${encodeURIComponent(taskId)}/status`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!res.ok) {
+    let errorDetail = 'Failed to update task progress.';
+    try {
+      const err = await res.json();
+      if (err.detail) errorDetail = typeof err.detail === 'string' ? err.detail : JSON.stringify(err.detail);
+    } catch {
+      errorDetail = `Server responded with status ${res.status}`;
+    }
+    throw new Error(errorDetail);
+  }
+
+  return await res.json();
+}
+
 
 

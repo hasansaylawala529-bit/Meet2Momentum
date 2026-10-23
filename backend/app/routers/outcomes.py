@@ -16,6 +16,7 @@ from app.services.firewall import (
     FirewallValidationError,
     ItemNotFoundError,
 )
+from app.services.tracker import enrich_action_item_schedule
 
 decisions_router = APIRouter(prefix="/api/decisions", tags=["decisions"])
 action_items_router = APIRouter(prefix="/api/action-items", tags=["action_items"])
@@ -47,7 +48,7 @@ def get_all_action_items(
             category=category,
             approval_status=approval_status
         )
-        return [ActionItem(**i) for i in items]
+        return [ActionItem(**enrich_action_item_schedule(i)) for i in items]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -83,7 +84,7 @@ def get_single_action_item(task_id: str) -> ActionItem:
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Action item with ID '{task_id}' not found."
         )
-    return ActionItem(**item)
+    return ActionItem(**enrich_action_item_schedule(item))
 
 
 @action_items_router.patch("/{task_id}", response_model=ActionItem)
