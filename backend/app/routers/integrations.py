@@ -14,15 +14,15 @@ router = APIRouter(prefix="/api/integrations", tags=["Third-Party Integrations"]
 action_integration_router = APIRouter(prefix="/api/action-items", tags=["Action Items Integration"])
 
 
+import os
+
 class GitHubDispatchRequest(BaseModel):
     task_ids: Optional[List[str]] = Field(None, description="Specific task IDs to dispatch. If omitted, dispatches all firewall-eligible items.")
     repo: Optional[str] = Field(None, description="Target GitHub repository (e.g. 'owner/repo'). Defaults to server configuration.")
-    token: Optional[str] = Field(None, description="GitHub personal access token. Defaults to server environment.")
 
 
 class GitHubSingleDispatchRequest(BaseModel):
-    repo: Optional[str] = Field(None, description="Target GitHub repository")
-    token: Optional[str] = Field(None, description="GitHub personal access token")
+    repo: Optional[str] = Field(None, description="Target GitHub repository (e.g. 'owner/repo'). Defaults to server configuration.")
 
 
 class GitHubConfigResponse(BaseModel):
@@ -33,10 +33,12 @@ class GitHubConfigResponse(BaseModel):
 
 @router.get("/github/config", response_model=GitHubConfigResponse, summary="Get GitHub integration configuration status")
 def get_github_config():
+    token = os.getenv("GITHUB_TOKEN", "").strip() or GITHUB_TOKEN
+    repo = os.getenv("GITHUB_REPO", "").strip() or GITHUB_REPO or "hasansaylawala529-bit/Meet2Momentum"
     return GitHubConfigResponse(
-        configured=bool(GITHUB_REPO),
-        repo=GITHUB_REPO,
-        has_token=bool(GITHUB_TOKEN),
+        configured=bool(repo and token),
+        repo=repo,
+        has_token=bool(token),
     )
 
 
@@ -45,8 +47,7 @@ def dispatch_github_batch_endpoint(payload: Optional[GitHubDispatchRequest] = No
     try:
         task_ids = payload.task_ids if payload else None
         repo = payload.repo if payload else None
-        token = payload.token if payload else None
-        return dispatch_github_batch(task_ids=task_ids, repo=repo, token=token)
+        return dispatch_github_batch(task_ids=task_ids, repo=repo)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -63,8 +64,7 @@ def dispatch_github_batch_endpoint(payload: Optional[GitHubDispatchRequest] = No
 def dispatch_single_github_endpoint(task_id: str, payload: Optional[GitHubSingleDispatchRequest] = None):
     try:
         repo = payload.repo if payload else None
-        token = payload.token if payload else None
-        result = create_github_issue(task_id=task_id, repo=repo, token=token)
+        result = create_github_issue(task_id=task_id, repo=repo)
         return ActionItem(**result)
     except ItemNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))

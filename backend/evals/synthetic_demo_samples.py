@@ -1,8 +1,9 @@
 """
-Gold standard evaluation dataset for Meet2Momentum information extraction and classification benchmark.
-Features 12 meeting transcripts modeled on AMI corpus, QMSum meeting structures, and engineering teams.
-Each transcript includes hand-labeled ground-truth decisions, commitments, suggestions, and unresolved questions.
+Synthetic demo samples for Meet2Momentum demonstration.
+[LABEL: SYNTHETIC DEMO SAMPLES - NOT EMPIRICAL BENCHMARK NUMBERS]
+Features 12 synthetic meeting transcripts modeled on AMI/QMSum structures for feature testing and local validation.
 """
+
 
 GOLD_DATASET = [
     {

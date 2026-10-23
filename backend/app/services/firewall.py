@@ -147,6 +147,18 @@ def reject_action_item(
     return ActionItem(**updated)
 
 
+UNRESOLVED_OWNERS = {
+    "unassigned", "tbd", "unknown", "none", "n/a", "unspecified", "anyone", "someone", "team"
+}
+
+
+def is_resolved_owner(owner: Optional[str]) -> bool:
+    """Check if owner is resolved to a specific human name, not empty or placeholder."""
+    if not owner or not owner.strip():
+        return False
+    return owner.strip().lower() not in UNRESOLVED_OWNERS
+
+
 def edit_action_item(
     task_id: str,
     updates: ActionItemUpdate,
@@ -156,6 +168,7 @@ def edit_action_item(
     Update editable fields of an action item (title, description, owner, deadline).
     Rule: If an approved item is materially edited, it returns to 'pending' for human review.
     Does NOT allow clients to set arbitrary approval statuses through edit requests.
+    Preserves duplicate flags unless title has materially changed.
     """
     item = get_action_item(task_id, db_path=db_path)
     if not item:
@@ -163,12 +176,14 @@ def edit_action_item(
 
     fields_to_update: Dict[str, Any] = {}
     material_change = False
+    title_changed = False
 
     if updates.title is not None:
         new_title = updates.title.strip()
         if new_title != item.get("title"):
             fields_to_update["title"] = new_title
             material_change = True
+            title_changed = True
 
     if updates.description is not None:
         new_desc = updates.description.strip() if updates.description else None
@@ -200,17 +215,24 @@ def edit_action_item(
     if not updated:
         raise ItemNotFoundError(task_id)
 
+    # Re-evaluate duplicates and conflicts only when title/owner/deadline change
     if material_change and updated:
-        # Re-evaluate duplicate and conflict flags after material edit
         re_evaluated = detect_duplicates_and_conflicts([updated], meeting_id=updated.get("meeting_id"), db_path=db_path)
         if re_evaluated:
             eval_item = re_evaluated[0]
-            detection_updates = {
-                "duplicate_of": eval_item.get("duplicate_of"),
-                "duplicate_note": eval_item.get("duplicate_note"),
+            detection_updates: Dict[str, Any] = {
                 "conflict_flag": eval_item.get("conflict_flag", False),
                 "conflict_note": eval_item.get("conflict_note"),
             }
+            # Only update duplicate_of / duplicate_note if title actually changed
+            # This prevents edits to owner/deadline/description from wiping duplicate flags
+            if title_changed:
+                detection_updates["duplicate_of"] = eval_item.get("duplicate_of")
+                detection_updates["duplicate_note"] = eval_item.get("duplicate_note")
+            elif not item.get("duplicate_of") and eval_item.get("duplicate_of"):
+                detection_updates["duplicate_of"] = eval_item.get("duplicate_of")
+                detection_updates["duplicate_note"] = eval_item.get("duplicate_note")
+
             updated = update_action_item(task_id, detection_updates, db_path=db_path) or updated
 
     if fields_to_update:
@@ -243,16 +265,21 @@ def evaluate_commitment_firewall(
     - Ineligible if approval_status is 'rejected' -> 'item_rejected'
     - Ineligible if item record missing or invalid -> 'invalid_item'
     - Ineligible if required fields (title, task_id) missing -> 'missing_required_information'
-    - Ineligible if classification invalid -> 'invalid_classification'
-    - Eligible ONLY if approval_status is 'approved' and all required attributes are valid.
+    - Ineligible if category is NOT 'commitment' -> 'not_a_commitment'
+    - Ineligible if owner is unresolved ('unassigned', 'tbd', etc.) -> 'unresolved_owner'
+    - Ineligible if evidence is unverified -> 'unverified_evidence'
+    - Ineligible if item has an unresolved conflict -> 'unresolved_conflict'
+    - Eligible ONLY if approval_status is 'approved' AND category is 'commitment'
+      AND owner is resolved AND evidence is verified AND conflict_flag is false.
     """
     if isinstance(item_or_task_id, str):
         item = get_action_item(item_or_task_id, db_path=db_path)
         task_id = item_or_task_id
     else:
         task_id = item_or_task_id.get("task_id", "")
-        # Re-verify against persisted server-side state
-        item = get_action_item(task_id, db_path=db_path) if task_id else None
+        # Re-verify against persisted server-side state when possible
+        db_item = get_action_item(task_id, db_path=db_path) if task_id else None
+        item = db_item if db_item is not None else item_or_task_id
 
     now_iso = datetime.now(timezone.utc).isoformat()
 
@@ -288,7 +315,23 @@ def evaluate_commitment_firewall(
     eligible = False
     block_reason: Optional[str] = None
 
-    # Rule 1: Approval status checks
+    # Rule 1: Title and core identifiers
+    title = (item.get("title") or "").strip()
+    if not title:
+        return FirewallEvaluationResult(
+            task_id=item.get("task_id", task_id),
+            meeting_id=item.get("meeting_id", ""),
+            title="Untitled Item",
+            category=cat_enum,
+            approval_status=app_status_enum,
+            eligible=False,
+            firewall_status="blocked",
+            block_reason="missing_required_information",
+            reasons=["Action item title is missing or empty."],
+            checked_at=now_iso,
+        )
+
+    # Rule 2: Approval status checks
     if approval_status_val == ApprovalStatus.PENDING.value:
         eligible = False
         block_reason = "approval_pending"
@@ -301,18 +344,44 @@ def evaluate_commitment_firewall(
         eligible = False
         block_reason = "invalid_status"
         reasons.append(f"Invalid approval status '{approval_status_val}'.")
+    # Rule 3: Category must be commitment (suggestions and open questions are blocked)
+    elif cat_enum != ActionItemCategory.COMMITMENT:
+        eligible = False
+        block_reason = "not_a_commitment"
+        reasons.append(
+            f"Only approved commitments can pass the Commitment Firewall. "
+            f"Current category is '{cat_enum.value}'. Suggestions and questions are non-binding."
+        )
+    # Rule 4: Resolved human owner is mandatory
+    elif not is_resolved_owner(item.get("owner")):
+        eligible = False
+        raw_owner = item.get("owner")
+        block_reason = "unresolved_owner"
+        reasons.append(
+            f"Action item owner is unresolved ('{raw_owner or 'Unassigned'}'). "
+            "A resolved human owner is strictly required by the Commitment Firewall."
+        )
+    # Rule 5: Deterministic grounded evidence verification
+    elif not bool(item.get("evidence_verified")):
+        eligible = False
+        block_reason = "unverified_evidence"
+        reasons.append(
+            "Action item evidence could not be verified against the meeting transcript. "
+            "Deterministic grounded evidence is required to pass the Commitment Firewall."
+        )
+    # Rule 6: Block unresolved conflicts
+    elif bool(item.get("conflict_flag")):
+        eligible = False
+        block_reason = "unresolved_conflict"
+        conflict_note = item.get("conflict_note") or "Conflicting owner or deadline detected across action items."
+        reasons.append(f"Action item has an unresolved conflict: {conflict_note}")
     else:
-        # Rule 2: Item must have valid data
-        title = (item.get("title") or "").strip()
-        if not title:
-            eligible = False
-            block_reason = "missing_required_information"
-            reasons.append("Action item title is missing or empty.")
-        else:
-            eligible = True
-            reasons.append("Item has been explicitly approved by a human reviewer.")
-            reasons.append("Item has valid persisted identifier and title.")
-            reasons.append("Commitment Firewall criteria satisfied for downstream execution.")
+        # All Commitment Firewall conditions satisfied
+        eligible = True
+        reasons.append("Item has been explicitly approved by a human reviewer.")
+        reasons.append("Item is an approved commitment with a resolved owner and verified evidence.")
+        reasons.append("No unresolved conflicts detected.")
+        reasons.append("Commitment Firewall criteria satisfied for downstream execution.")
 
     return FirewallEvaluationResult(
         task_id=item.get("task_id", task_id),

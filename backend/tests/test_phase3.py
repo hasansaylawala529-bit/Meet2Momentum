@@ -271,31 +271,42 @@ def test_edit_validation_empty_title_fails(client, temp_db):
 
 def test_commitment_firewall_evaluation_states(client, temp_db):
     meeting_id, items = seed_test_meeting_and_actions(temp_db)
-    task_pending = items[0]["task_id"]
-    task_approved = items[1]["task_id"]
-    task_rejected = items[2]["task_id"]
+    commitment_item = next(i for i in items if i["category"] == "commitment")
+    suggestion_item = next(i for i in items if i["category"] == "suggestion")
+    question_item = next(i for i in items if i["category"] == "unresolved_question")
 
-    # Approve task 1, reject task 2
-    client.post(f"/api/action-items/{task_approved}/approve")
-    client.post(f"/api/action-items/{task_rejected}/reject")
+    task_commitment = commitment_item["task_id"]
+    task_suggestion = suggestion_item["task_id"]
+    task_rejected = question_item["task_id"]
 
-    # 1. Pending check -> Blocked (approval_pending)
-    resp_pending = client.get(f"/api/action-items/{task_pending}/firewall")
+    # 1. Pending commitment check -> Blocked (approval_pending)
+    resp_pending = client.get(f"/api/action-items/{task_commitment}/firewall")
     assert resp_pending.status_code == 200
     res_p = resp_pending.json()
     assert res_p["eligible"] is False
     assert res_p["firewall_status"] == "blocked"
     assert res_p["block_reason"] == "approval_pending"
 
-    # 2. Approved check -> Eligible
-    resp_approved = client.get(f"/api/action-items/{task_approved}/firewall")
+    # 2. Approve commitment -> Eligible
+    client.post(f"/api/action-items/{task_commitment}/approve")
+    resp_approved = client.get(f"/api/action-items/{task_commitment}/firewall")
     assert resp_approved.status_code == 200
     res_a = resp_approved.json()
     assert res_a["eligible"] is True
     assert res_a["firewall_status"] == "eligible"
     assert res_a["block_reason"] is None
 
-    # 3. Rejected check -> Blocked (item_rejected)
+    # 3. Approved suggestion -> Blocked (not_a_commitment)
+    client.post(f"/api/action-items/{task_suggestion}/approve")
+    resp_sugg = client.get(f"/api/action-items/{task_suggestion}/firewall")
+    assert resp_sugg.status_code == 200
+    res_s = resp_sugg.json()
+    assert res_s["eligible"] is False
+    assert res_s["firewall_status"] == "blocked"
+    assert res_s["block_reason"] == "not_a_commitment"
+
+    # 4. Rejected check -> Blocked (item_rejected)
+    client.post(f"/api/action-items/{task_rejected}/reject")
     resp_rejected = client.get(f"/api/action-items/{task_rejected}/firewall")
     assert resp_rejected.status_code == 200
     res_r = resp_rejected.json()
@@ -304,9 +315,56 @@ def test_commitment_firewall_evaluation_states(client, temp_db):
     assert res_r["block_reason"] == "item_rejected"
 
 
+def test_commitment_firewall_blocks_unresolved_owner(client, temp_db):
+    """An approved commitment with an unassigned or TBD owner must be blocked by the firewall."""
+    meeting_id, items = seed_test_meeting_and_actions(temp_db)
+    commitment_item = next(i for i in items if i["category"] == "commitment")
+    task_id = commitment_item["task_id"]
+
+    # Edit owner to Unassigned
+    client.patch(f"/api/action-items/{task_id}", json={"owner": "unassigned"})
+    client.post(f"/api/action-items/{task_id}/approve")
+
+    res = client.get(f"/api/action-items/{task_id}/firewall").json()
+    assert res["eligible"] is False
+    assert res["block_reason"] == "unresolved_owner"
+
+
+def test_commitment_firewall_blocks_unverified_evidence(client, temp_db):
+    """An approved commitment with unverified evidence must be blocked by the firewall."""
+    meeting_id, items = seed_test_meeting_and_actions(temp_db)
+    commitment_item = next(i for i in items if i["category"] == "commitment")
+    task_id = commitment_item["task_id"]
+
+    # Update evidence_verified to False in database
+    from app.database import update_action_item
+    update_action_item(task_id, {"evidence_verified": 0}, db_path=temp_db)
+    client.post(f"/api/action-items/{task_id}/approve")
+
+    res = client.get(f"/api/action-items/{task_id}/firewall").json()
+    assert res["eligible"] is False
+    assert res["block_reason"] == "unverified_evidence"
+
+
+def test_commitment_firewall_blocks_unresolved_conflicts(client, temp_db):
+    """An approved commitment with conflict_flag=True must be blocked by the firewall."""
+    meeting_id, items = seed_test_meeting_and_actions(temp_db)
+    commitment_item = next(i for i in items if i["category"] == "commitment")
+    task_id = commitment_item["task_id"]
+
+    from app.database import update_action_item
+    update_action_item(task_id, {"conflict_flag": 1, "conflict_note": "Conflicting deadlines"}, db_path=temp_db)
+    client.post(f"/api/action-items/{task_id}/approve")
+
+    res = client.get(f"/api/action-items/{task_id}/firewall").json()
+    assert res["eligible"] is False
+    assert res["block_reason"] == "unresolved_conflict"
+
+
 def test_commitment_firewall_bulk_evaluations(client, temp_db):
     meeting_id, items = seed_test_meeting_and_actions(temp_db)
-    client.post(f"/api/action-items/{items[0]['task_id']}/approve")
+    commitment_item = next(i for i in items if i["category"] == "commitment")
+    client.post(f"/api/action-items/{commitment_item['task_id']}/approve")
 
     resp = client.get("/api/action-items/firewall/evaluations")
     assert resp.status_code == 200

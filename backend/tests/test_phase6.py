@@ -389,7 +389,7 @@ def test_reextraction_cleans_dangling_duplicate_references(temp_db):
         "owner": "Elena",
         "due_date": "2026-10-30",
         "source_text": "Elena will configure Redis.",
-        "approval_status": "approved",
+        "approval_status": "pending",
     }
     save_extraction_results(a_id, decisions=[], action_items=[item_a1], db_path=temp_db)
 

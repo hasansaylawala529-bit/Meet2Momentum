@@ -153,18 +153,19 @@ def detect_duplicates_and_conflicts(
 
     Never automatically merges, deletes, approves, rejects, or alters task fields.
     """
-    # Fetch existing action items from other meetings for cross-meeting detection
+    # Fetch existing action items from database for comparison
     try:
         existing_items = list_action_items(db_path=db_path)
     except Exception:
         existing_items = []
 
-    other_meeting_items = [
+    input_ids = {i.get("task_id") for i in items if i.get("task_id")}
+    db_items = [
         it for it in existing_items
-        if it.get("meeting_id") != meeting_id and it.get("task_id") not in {i.get("task_id") for i in items if i.get("task_id")}
+        if it.get("task_id") not in input_ids
     ]
 
-    # Combined candidate pool for comparison (same batch items + prior meeting items)
+    # Combined candidate pool for comparison (same batch items + persisted DB items)
     enriched_items = []
 
     for idx, item in enumerate(items):
@@ -184,13 +185,15 @@ def detect_duplicates_and_conflicts(
             elif is_dup:
                 duplicate_candidates.append((other, sim))
 
-        # 2. Compare with items from prior meetings (cross-meeting comparison)
-        for other in other_meeting_items:
+        # 2. Compare with items already saved in the database (same-meeting or cross-meeting)
+        for other in db_items:
             if other.get("task_id") == task_id:
                 continue
             is_dup, is_conf, conf_reason, sim = evaluate_pair_relationship(item_copy, other, threshold=threshold)
+            is_cross = other.get("meeting_id") != meeting_id
             if is_conf and conf_reason:
-                conflict_notes.append(f"[Cross-Meeting] {conf_reason}")
+                prefix = "[Cross-Meeting] " if is_cross else ""
+                conflict_notes.append(f"{prefix}{conf_reason}")
             elif is_dup:
                 duplicate_candidates.append((other, sim))
 

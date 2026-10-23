@@ -45,3 +45,8 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Eval datasets
+QMSum/
+backend/QMSum/
+

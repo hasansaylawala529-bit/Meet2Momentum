@@ -196,15 +196,43 @@ def save_extraction_results(
     conn = get_db_connection(db_path)
     try:
         with conn:
-            # 1. Clear previous extracted records for this meeting and clean dangling duplicate references
-            conn.execute(
-                "UPDATE action_items SET duplicate_of = NULL WHERE duplicate_of IN (SELECT task_id FROM action_items WHERE meeting_id = ?)",
+            # 1. Fetch already approved items for this meeting to preserve them
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT task_id, title, source_text FROM action_items WHERE meeting_id = ? AND approval_status = 'approved'",
                 (meeting_id,)
             )
-            conn.execute("DELETE FROM decisions WHERE meeting_id = ?", (meeting_id,))
-            conn.execute("DELETE FROM action_items WHERE meeting_id = ?", (meeting_id,))
+            approved_rows = cursor.fetchall()
+            approved_task_ids = {row["task_id"] for row in approved_rows}
+            approved_titles = {row["title"].strip().lower() for row in approved_rows if row["title"]}
 
-            # 2. Insert new decisions
+            # 2. Clear previous non-approved extracted records for this meeting and clean dangling duplicate references
+            if approved_task_ids:
+                conn.execute(
+                    """
+                    UPDATE action_items 
+                    SET duplicate_of = NULL 
+                    WHERE duplicate_of IN (
+                        SELECT task_id FROM action_items 
+                        WHERE meeting_id = ? AND approval_status != 'approved'
+                    )
+                    """,
+                    (meeting_id,)
+                )
+                conn.execute(
+                    "DELETE FROM action_items WHERE meeting_id = ? AND approval_status != 'approved'",
+                    (meeting_id,)
+                )
+            else:
+                conn.execute(
+                    "UPDATE action_items SET duplicate_of = NULL WHERE duplicate_of IN (SELECT task_id FROM action_items WHERE meeting_id = ?)",
+                    (meeting_id,)
+                )
+                conn.execute("DELETE FROM action_items WHERE meeting_id = ?", (meeting_id,))
+
+            conn.execute("DELETE FROM decisions WHERE meeting_id = ?", (meeting_id,))
+
+            # 3. Insert new decisions
             for d in decisions:
                 conn.execute(
                     """
@@ -225,9 +253,11 @@ def save_extraction_results(
                     )
                 )
 
-            # 3. Insert new action items
-            # 3. Insert new action items & initial audit event
+            # 4. Insert new action items (skipping any that duplicate already-approved items)
             for a in action_items:
+                if a.get("title", "").strip().lower() in approved_titles or a.get("task_id") in approved_task_ids:
+                    continue
+
                 created_ts = a.get("created_at", datetime.now(timezone.utc).isoformat())
                 conn.execute(
                     """

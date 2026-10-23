@@ -50,25 +50,38 @@ Meet2Momentum maintains three completely decoupled state lifecycles:
 
 ---
 
-## Empirical Accuracy & Evaluation Benchmark (AMI & QMSum)
+## Evaluation Framework (QMSum & Real Human Annotation)
 
-To rigorously validate extraction fidelity, categorization accuracy, and evidence grounding, Meet2Momentum includes an automated benchmark suite (`backend/evals/benchmark.py`) evaluated across **12 hand-labeled meeting transcripts** modeled on the **AMI Meeting Corpus**, **QMSum academic & committee structures**, and cross-functional engineering meetings:
+Meet2Momentum measures information extraction precision, recall, and categorization accuracy against real human annotations on real meeting transcripts (AMI / ICSI / Committee meetings redistributed in QMSum).
 
-| Benchmark Evaluation Metric | Score | Target / Hackathon Baseline | Verification Status |
-| :--- | :--- | :--- | :--- |
-| **Action Item Extraction Precision** | **100.0%** | &ge; 85.0% | PASS |
-| **Action Item Extraction Recall** | **100.0%** | &ge; 85.0% | PASS |
-| **Action Item F1 Score** | **100.0%** | &ge; 85.0% | PASS |
-| **Commitment vs. Suggestion Precision** | **100.0%** | &ge; 80.0% | PASS |
-| **Commitment vs. Suggestion Recall** | **100.0%** | &ge; 80.0% | PASS |
-| **Commitment F1 Score** | **100.0%** | &ge; 80.0% | PASS |
-| **Verbatim Evidence Grounding Accuracy** | **100.0%** | &ge; 95.0% (Zero Hallucination) | PASS |
-| **Overall Classification Accuracy** | **100.0%** | &ge; 85.0% | PASS |
-| **Commitment Firewall Block Rate (Unapproved)** | **100.0%** | 100.0% Deterministic Security | PASS |
-
-*The evaluation covers 37 action items, 13 commitments, 12 exploratory suggestions, 12 unresolved dependencies, and 12 decisions. Reproduce locally with `python backend/evals/benchmark.py` or run `pytest backend/tests/test_benchmark_eval.py`.*
+The evaluation harness (`backend/evals/real_eval.py`) samples multi-turn windows, produces human annotation sheets, and scores the extractor:
+1. **Sampling Windows**:
+   ```bash
+   git clone https://github.com/Yale-LILY/QMSum.git
+   python evals/real_eval.py sample --qmsum ./QMSum --n 12 --turns 100
+   ```
+   Outputs `eval_windows.json` and `annotation_sheet.csv`. Annotators label independently without seeing model output.
+2. **Extraction**:
+   ```bash
+   python evals/real_eval.py extract --windows eval_windows.json --out predictions.json
+   ```
+3. **Scoring**:
+   ```bash
+   python evals/real_eval.py score --windows eval_windows.json --predictions predictions.json --gold gold.csv --gold1 annotatorA.csv --gold2 annotatorB.csv
+   ```
+   Measures Detection P/R/F1, Category Classification Accuracy, Per-Class Metrics, and Inter-Annotator Agreement (Cohen's Kappa).
 
 ---
+
+## Commitment Firewall Criteria
+
+An action item is eligible for downstream execution/export **ONLY IF** all of the following deterministic criteria are met:
+1. **Approval Status**: Explicitly `approved` by human reviewer.
+2. **Category**: Must be a `commitment` (suggestions and unresolved questions are non-binding and blocked).
+3. **Resolved Owner**: Must have a specific human owner (cannot be empty, `unassigned`, `tbd`, or `unknown`).
+4. **Verified Evidence**: Verbatim transcript evidence citation must be deterministically verified against the transcript.
+5. **No Unresolved Conflicts**: Must not have an active deadline or owner conflict flag (`conflict_flag == False`).
+
 
 ## Phase 1–6 Feature Implementation Summary
 
@@ -81,7 +94,7 @@ To rigorously validate extraction fidelity, categorization accuracy, and evidenc
   * Pydantic v2 domain schemas (`MeetingExtractionRaw`, `ExtractedDecisionRaw`, `ExtractedActionItemRaw`).
   * Ground-truth evidence verification matching cited excerpts against transcripts with normalized whitespace fallback.
   * Outcome categorization (`commitment`, `suggestion`, `unresolved_question`) and clarification detection.
-  * Model fallback cascade (`gemini-2.5-flash`, `gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.7-flash`).
+  * Model fallback cascade (`gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.7-flash`).
 * **Phase 3 — Human Approval Gate & Commitment Firewall:**
   * State transition enforcement (`pending` &rarr; `approved`/`rejected`). Re-approving or directly approving rejected items is blocked with HTTP 400.
   * Material edit rule: Editing title, description, owner, or deadline of an approved item automatically resets its status to `pending`.
@@ -107,7 +120,7 @@ To rigorously validate extraction fidelity, categorization accuracy, and evidenc
 
 * **Frontend:** React 19, Vite 6, Vanilla CSS (Strict Professional SaaS Light Theme).
 * **Backend:** Python 3.10+ (Verified on Python 3.14), FastAPI, Uvicorn, Pydantic v2, `python-multipart`, `python-dotenv`.
-* **AI Engine:** Google GenAI SDK (`google-genai` >= 2.30.0) calling Gemini 2.5/3.x Flash models.
+* **AI Engine:** Google GenAI SDK (`google-genai` >= 2.30.0) calling Gemini Flash models (`gemini-3.1-flash-lite`, `gemini-3.5-flash`, `gemini-3.7-flash`).
 * **Database:** SQLite (local file storage with foreign keys, parameterization, and non-destructive column migrations).
 * **Testing:** Pytest, HTTPX, FastAPI TestClient.
 
@@ -199,7 +212,7 @@ Configure `backend/.env` with your Gemini API key and optional settings:
 ```ini
 # Google Gemini AI Configuration
 GEMINI_API_KEY=your_gemini_api_key_here
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
 
 # Backend Server Configuration
 BACKEND_HOST=127.0.0.1

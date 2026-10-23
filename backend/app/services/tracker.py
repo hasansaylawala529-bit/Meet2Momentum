@@ -97,19 +97,50 @@ def parse_due_date(due_date_str: Optional[str], ref_datetime: Optional[datetime]
         except (ValueError, KeyError):
             pass
 
-    # 4. Relative words: "today", "tomorrow"
-    if "today" in s:
-        return datetime(ref.year, ref.month, ref.day, 23, 59, 59, tzinfo=timezone.utc)
-    if "tomorrow" in s:
-        tom = ref + timedelta(days=1)
-        return datetime(tom.year, tom.month, tom.day, 23, 59, 59, tzinfo=timezone.utc)
+    # 4. End of month: "end of month", "end of the month", "eom"
+    import calendar
+    if "end of month" in s or "end of the month" in s or re.search(r"\beom\b", s):
+        last_day = calendar.monthrange(ref.year, ref.month)[1]
+        return datetime(ref.year, ref.month, last_day, 23, 59, 59, tzinfo=timezone.utc)
 
-    # 5. Day of week: e.g. "Friday", "this Friday", "by Friday 5pm"
+    # End of specific named month: e.g. "end of november", "end of nov"
+    end_of_named_month = re.search(
+        r"end of\s+(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\.?",
+        s
+    )
+    if end_of_named_month:
+        m_str = end_of_named_month.group(1)
+        target_m = MONTH_NAMES[m_str]
+        year = current_year if target_m >= ref.month else current_year + 1
+        last_day = calendar.monthrange(year, target_m)[1]
+        return datetime(year, target_m, last_day, 23, 59, 59, tzinfo=timezone.utc)
+
+    # 5. Day of week: e.g. "Friday", "this Friday", "by Friday 5pm", "Friday EOD"
     for wname, wday in WEEKDAYS.items():
         if re.search(r"\b" + wname + r"\b", s):
             days_ahead = (wday - ref.weekday()) % 7
+            if days_ahead == 0 and ("next" in s or "following" in s):
+                days_ahead = 7
             target = ref + timedelta(days=days_ahead)
             return datetime(target.year, target.month, target.day, 23, 59, 59, tzinfo=timezone.utc)
+
+    # 6. Relative words: "today", "tomorrow"
+    if "tomorrow" in s:
+        tom = ref + timedelta(days=1)
+        return datetime(tom.year, tom.month, tom.day, 23, 59, 59, tzinfo=timezone.utc)
+    if "today" in s:
+        return datetime(ref.year, ref.month, ref.day, 23, 59, 59, tzinfo=timezone.utc)
+
+    # 7. EOD / End of Day / COB: "eod", "by eod", "end of day", "cob", "close of business"
+    if re.search(r"\b(eod|end of (the )?day|cob|close of business)\b", s):
+        return datetime(ref.year, ref.month, ref.day, 23, 59, 59, tzinfo=timezone.utc)
+
+    # 8. End of week: "end of week", "end of the week", "eow"
+    if "end of week" in s or "end of the week" in s or re.search(r"\beow\b", s):
+        # Target coming Friday (weekday 4)
+        days_ahead = (4 - ref.weekday()) % 7
+        target = ref + timedelta(days=days_ahead)
+        return datetime(target.year, target.month, target.day, 23, 59, 59, tzinfo=timezone.utc)
 
     return None
 

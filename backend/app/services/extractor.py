@@ -250,7 +250,7 @@ Ensure every item includes exact verbatim source_text from the transcript.
         db_path=db_path
     )
 
-    # Persist extraction results transactionally to SQLite
+    # Persist extraction results transactionally to SQLite (preserving any approved items)
     save_extraction_results(
         meeting_id=meeting_id,
         decisions=processed_decisions,
@@ -258,9 +258,15 @@ Ensure every item includes exact verbatim source_text from the transcript.
         db_path=db_path
     )
 
-    # Build Pydantic response objects
+    from app.database import list_action_items
+    persisted_actions = list_action_items(meeting_id=meeting_id, db_path=db_path)
+    actions_models = [ActionItem(**a) for a in persisted_actions]
+
+    c_count = sum(1 for a in actions_models if a.category == ActionItemCategory.COMMITMENT)
+    s_count = sum(1 for a in actions_models if a.category == ActionItemCategory.SUGGESTION)
+    u_count = sum(1 for a in actions_models if a.category == ActionItemCategory.UNRESOLVED_QUESTION)
+
     decisions_models = [Decision(**d) for d in processed_decisions]
-    actions_models = [ActionItem(**a) for a in processed_actions]
 
     return ExtractionResponse(
         meeting_id=meeting_id,
@@ -268,8 +274,8 @@ Ensure every item includes exact verbatim source_text from the transcript.
         action_items=actions_models,
         total_decisions=len(decisions_models),
         total_action_items=len(actions_models),
-        commitments_count=commitments_count,
-        suggestions_count=suggestions_count,
-        unresolved_questions_count=unresolved_count,
+        commitments_count=c_count,
+        suggestions_count=s_count,
+        unresolved_questions_count=u_count,
         extracted_at=extracted_at,
     )
