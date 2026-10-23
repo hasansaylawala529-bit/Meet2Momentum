@@ -1,0 +1,483 @@
+/* ==========================================================================
+   Meet2Momentum Triage Dashboard Styles (Overview)
+   Strictly above-the-fold at 1440x900, 8px grid, 1px borders, slate palette, no emoji.
+   ========================================================================== */
+
+.triage-overview-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1-5);
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* 1. StatCards Row: Max 4 in one row */
+.triage-stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-1-5);
+}
+
+.triage-stat-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+  user-select: none;
+}
+
+.triage-stat-card:hover {
+  border-color: var(--accent-blue);
+  background-color: var(--slate-50);
+}
+
+.triage-stat-card:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25);
+}
+
+.triage-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.triage-stat-label {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.triage-stat-icon-box {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: var(--slate-100);
+  color: var(--slate-600);
+}
+
+.triage-stat-card.pending .triage-stat-icon-box {
+  background-color: var(--accent-blue-subtle);
+  color: var(--accent-blue);
+}
+
+.triage-stat-card.approved .triage-stat-icon-box {
+  background-color: var(--status-green-bg);
+  color: var(--status-green);
+}
+
+.triage-stat-card.overdue .triage-stat-icon-box {
+  background-color: var(--status-red-bg);
+  color: var(--status-red);
+}
+
+.triage-stat-card.unassigned .triage-stat-icon-box {
+  background-color: var(--status-amber-bg);
+  color: var(--status-amber);
+}
+
+.triage-stat-value {
+  font-size: var(--font-size-24);
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  margin-top: 0.15rem;
+}
+
+.triage-stat-footer {
+  font-size: var(--font-size-12);
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 2. Slim Pipeline Strip */
+.pipeline-strip {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: 0.55rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.pipeline-stages {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  flex-wrap: wrap;
+}
+
+.pipeline-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-05);
+  font-size: var(--font-size-13);
+  color: var(--text-secondary);
+}
+
+.pipeline-stage-name {
+  font-weight: 500;
+}
+
+.pipeline-stage-count {
+  font-weight: 700;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+}
+
+.pipeline-arrow {
+  color: var(--slate-400);
+  display: inline-flex;
+  align-items: center;
+}
+
+.pipeline-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 240px;
+  max-width: 340px;
+  width: 100%;
+}
+
+.pipeline-bar {
+  flex: 1;
+  height: 8px;
+  background-color: var(--slate-100);
+  border-radius: var(--radius-full);
+  display: flex;
+  overflow: hidden;
+}
+
+.pipeline-segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.pipeline-segment.completed {
+  background-color: var(--status-green);
+}
+
+.pipeline-segment.exported {
+  background-color: var(--accent-blue);
+}
+
+.pipeline-segment.approved {
+  background-color: var(--color-teal);
+}
+
+.pipeline-segment.pending {
+  background-color: var(--slate-300);
+}
+
+.pipeline-pct-label {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  min-width: 32px;
+  text-align: right;
+}
+
+/* 3. Main Split Grid (Needs Attention & Recent Meetings) */
+.triage-split-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1-5);
+  align-items: stretch;
+}
+
+.triage-panel-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  max-height: 480px;
+}
+
+.triage-panel-header {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.triage-panel-title-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.triage-panel-title {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.2;
+}
+
+.triage-panel-badge {
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 0.1rem 0.45rem;
+  border-radius: var(--radius-full);
+  background-color: var(--slate-100);
+  color: var(--slate-700);
+}
+
+.triage-panel-badge.amber {
+  background-color: var(--status-amber-bg);
+  color: var(--status-amber);
+  border: 1px solid var(--status-amber-border);
+}
+
+.triage-panel-subtitle {
+  font-size: var(--font-size-12);
+  color: var(--text-muted);
+}
+
+.triage-panel-body {
+  padding: 0.75rem 1rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+/* Needs Your Attention Items */
+.attention-item {
+  background-color: var(--slate-50);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  transition: border-color 0.15s ease;
+}
+
+.attention-item:hover {
+  border-color: var(--slate-300);
+}
+
+.attention-item-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.attention-item-title {
+  font-size: var(--font-size-13);
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.3;
+}
+
+.attention-item-meeting-ref {
+  font-size: var(--font-size-12);
+  color: var(--text-muted);
+  margin-top: 0.15rem;
+}
+
+.attention-item-badges {
+  display: flex;
+  align-items: center;
+  gap: var(--space-05);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.attention-quote {
+  font-size: var(--font-size-12);
+  color: var(--text-secondary);
+  font-style: italic;
+  background-color: #FFFFFF;
+  border-left: 2px solid var(--accent-blue);
+  padding: 0.25rem 0.5rem;
+  border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
+  margin: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attention-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-1);
+  padding-top: 0.35rem;
+  border-top: 1px dashed var(--border-color);
+}
+
+.attention-actions-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-05);
+}
+
+/* Inline Edit Container */
+.attention-inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  background-color: #FFFFFF;
+  border: 1px solid var(--accent-blue-border);
+  border-radius: var(--radius-sm);
+  padding: 0.65rem;
+}
+
+.inline-edit-input {
+  width: 100%;
+  padding: 0.35rem 0.55rem;
+  font-size: var(--font-size-12);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xs);
+  outline: none;
+  font-family: inherit;
+  color: var(--text-main);
+}
+
+.inline-edit-input:focus {
+  border-color: var(--accent-blue);
+}
+
+.inline-edit-row {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.inline-edit-row .inline-edit-input {
+  flex: 1;
+}
+
+.inline-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-05);
+}
+
+/* Dense Recent Meetings Table */
+.dense-table-wrapper {
+  overflow-x: auto;
+}
+
+.dense-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-12);
+  text-align: left;
+}
+
+.dense-table th {
+  background-color: var(--slate-50);
+  padding: 0.5rem 0.65rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: var(--font-size-12);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.dense-table td {
+  padding: 0.55rem 0.65rem;
+  border-bottom: 1px solid var(--slate-100);
+  color: var(--text-main);
+  vertical-align: middle;
+}
+
+.dense-table tr:last-child td {
+  border-bottom: none;
+}
+
+.dense-table tr:hover td {
+  background-color: var(--slate-50);
+}
+
+.dense-table-title {
+  font-weight: 600;
+  color: var(--text-main);
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dense-date-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.btn-add-date {
+  background: none;
+  border: none;
+  color: var(--accent-blue);
+  font-size: var(--font-size-12);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.btn-add-date:hover {
+  color: var(--accent-blue-hover);
+}
+
+.dense-counts-cell {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-secondary);
+}
+
+.triage-empty-card {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+}
+
+.triage-empty-card h4 {
+  font-size: var(--font-size-14);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.triage-empty-card p {
+  font-size: var(--font-size-12);
+  color: var(--text-muted);
+  margin: 0;
+  max-width: 280px;
+}

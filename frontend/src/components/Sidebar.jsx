@@ -1,127 +1,133 @@
 import React from 'react';
 
+/**
+ * Grouped Navigation Sidebar:
+ * - Review (Review queue, Action Items)
+ * - Meetings (Meetings, Decisions)
+ * - Execution (Export, Tracking)
+ * - Action-only badges (e.g. pending review, overdue)
+ * - Collapses to icons rail (64px)
+ * - One-line footer: "AI proposes. Humans approve."
+ */
 export default function Sidebar({
   activeTab,
   onSelectTab,
-  meetingCount = 0,
-  decisionCount = 0,
-  actionCount = 0,
-  followupCount = 0,
+  pendingReviewCount = 0,
   exportCount = 0,
   overdueCount = 0,
   isOpen,
   onClose,
+  isCollapsed = false,
+  onToggleCollapse,
 }) {
-  const navItems = [
+  const navGroups = [
     {
-      id: 'overview',
-      label: 'Overview',
-      iconColor: 'var(--color-blue)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <rect x="3" y="3" width="7" height="7" rx="1.5" />
-          <rect x="14" y="3" width="7" height="7" rx="1.5" />
-          <rect x="14" y="14" width="7" height="7" rx="1.5" />
-          <rect x="3" y="14" width="7" height="7" rx="1.5" />
-        </svg>
-      )
+      title: 'Review',
+      items: [
+        {
+          id: 'overview',
+          label: 'Review queue',
+          badge: pendingReviewCount > 0 ? pendingReviewCount : null,
+          badgeType: 'amber',
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
+            </svg>
+          ),
+        },
+        {
+          id: 'actions',
+          label: 'Action Items',
+          badge: pendingReviewCount > 0 ? pendingReviewCount : null,
+          badgeType: 'amber',
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="9 11 12 14 22 4" />
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+            </svg>
+          ),
+        },
+      ],
     },
     {
-      id: 'meetings',
-      label: 'Meetings',
-      count: meetingCount > 0 ? meetingCount : null,
-      iconColor: 'var(--color-teal)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="16" y1="13" x2="8" y2="13" />
-          <line x1="16" y1="17" x2="8" y2="17" />
-        </svg>
-      )
+      title: 'Meetings',
+      items: [
+        {
+          id: 'meetings',
+          label: 'Meetings',
+          badge: null,
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+          ),
+        },
+        {
+          id: 'decisions',
+          label: 'Decisions',
+          badge: null,
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 14 14" />
+            </svg>
+          ),
+        },
+      ],
     },
     {
-      id: 'decisions',
-      label: 'Decisions',
-      count: decisionCount > 0 ? decisionCount : null,
-      iconColor: 'var(--color-lavender)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 14 14" />
-        </svg>
-      )
+      title: 'Execution',
+      items: [
+        {
+          id: 'export',
+          label: 'Export',
+          badge: exportCount > 0 ? exportCount : null,
+          badgeType: 'ready',
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          ),
+        },
+        {
+          id: 'tracking',
+          label: 'Tracking',
+          badge: overdueCount > 0 ? overdueCount : null,
+          badgeType: 'urgent',
+          icon: (
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="20" x2="18" y2="10" />
+              <line x1="12" y1="20" x2="12" y2="4" />
+              <line x1="6" y1="20" x2="6" y2="14" />
+            </svg>
+          ),
+        },
+      ],
     },
-    {
-      id: 'actions',
-      label: 'Action Items',
-      count: actionCount > 0 ? actionCount : null,
-      iconColor: 'var(--color-green)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <polyline points="9 11 12 14 22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-      )
-    },
-    {
-      id: 'followups',
-      label: 'Follow-ups',
-      count: followupCount > 0 ? followupCount : null,
-      iconColor: 'var(--color-amber)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-        </svg>
-      )
-    },
-    {
-      id: 'export',
-      label: 'Execution & Export',
-      count: exportCount > 0 ? exportCount : null,
-      iconColor: 'var(--color-blue)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-          <polyline points="7 10 12 15 17 10" />
-          <line x1="12" y1="15" x2="12" y2="3" />
-        </svg>
-      )
-    },
-    {
-      id: 'tracking',
-      label: 'Execution Tracking',
-      count: overdueCount > 0 ? `${overdueCount}` : null,
-      iconColor: 'var(--color-lavender)',
-      icon: (
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="18" y1="20" x2="18" y2="10" />
-          <line x1="12" y1="20" x2="12" y2="4" />
-          <line x1="6" y1="20" x2="6" y2="14" />
-        </svg>
-      )
-    }
   ];
 
   return (
     <>
-      {/* Mobile backdrop */}
+      {/* Mobile Backdrop */}
       {isOpen && (
-        <div 
-          className="sidebar-backdrop" 
-          onClick={onClose}
-          aria-hidden="true"
-        />
+        <div className="sidebar-backdrop" onClick={onClose} aria-hidden="true" />
       )}
 
-      <aside className={`app-sidebar ${isOpen ? 'open' : ''}`}>
+      <aside className={`app-sidebar ${isCollapsed ? 'collapsed' : ''} ${isOpen ? 'open' : ''}`}>
         {/* Brand Header */}
         <div className="sidebar-brand-wrapper">
           <div className="sidebar-brand">
             <div className="sidebar-logo-mark" aria-hidden="true">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
               </svg>
             </div>
             <div className="sidebar-brand-text">
@@ -129,10 +135,28 @@ export default function Sidebar({
               <span className="sidebar-brand-tag">Meeting to Execution</span>
             </div>
           </div>
+
+          {/* Desktop Collapse Toggle */}
+          {onToggleCollapse && (
+            <button
+              type="button"
+              className="sidebar-collapse-toggle"
+              onClick={onToggleCollapse}
+              title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar to icons'}
+              aria-label="Toggle sidebar collapse"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="11 17 6 12 11 7" />
+                <polyline points="18 17 13 12 18 7" />
+              </svg>
+            </button>
+          )}
+
+          {/* Mobile Close Button */}
           {onClose && (
-            <button 
-              type="button" 
-              className="sidebar-close-btn" 
+            <button
+              type="button"
+              className="sidebar-close-btn"
               onClick={onClose}
               aria-label="Close navigation"
             >
@@ -141,51 +165,61 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Navigation Section */}
+        {/* Grouped Nav Items */}
         <div className="sidebar-nav-container">
-          <div className="sidebar-nav-group-label">WORKSPACE</div>
-          <nav className="sidebar-nav" aria-label="Product Navigation">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
-                  onClick={() => {
-                    onSelectTab(item.id);
-                    if (onClose) onClose();
-                  }}
-                >
-                  <span 
-                    className="sidebar-item-icon" 
-                    style={{ color: isActive ? 'var(--color-blue)' : item.iconColor }}
+          {navGroups.map((group) => (
+            <div key={group.title} className="sidebar-nav-group">
+              <div className="sidebar-group-title">{group.title}</div>
+              <div className="sidebar-group-divider" />
+              {group.items.map((item) => {
+                const isActive = activeTab === item.id;
+
+                return (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className={`sidebar-nav-item ${isActive ? 'active' : ''}`}
+                    onClick={() => {
+                      onSelectTab(item.id);
+                      if (onClose) onClose();
+                    }}
+                    title={isCollapsed ? `${item.label}${item.badge ? ` (${item.badge})` : ''}` : undefined}
                   >
-                    {item.icon}
-                  </span>
-                  <span className="sidebar-item-label">{item.label}</span>
-                  {item.count !== null && item.count !== undefined && (
-                    <span className="sidebar-count-badge">
-                      {item.count}
+                    <span className="sidebar-item-icon">
+                      {item.icon}
                     </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
+                    <span className="sidebar-item-label">{item.label}</span>
+                    {item.badge !== null && item.badge !== undefined && (
+                      <span className={`sidebar-action-badge ${item.badgeType || ''}`}>
+                        {item.badge}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
         </div>
 
-        {/* Sidebar Product Footer */}
-        <div className="sidebar-footer-card">
-          <div className="sidebar-footer-heading">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        {/* Collapsed Bottom Expand Button */}
+        {onToggleCollapse && (
+          <button
+            type="button"
+            className="sidebar-bottom-expand-btn"
+            onClick={onToggleCollapse}
+            title="Expand sidebar"
+            aria-label="Expand sidebar"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="13 17 18 12 13 7" />
+              <polyline points="6 17 11 12 6 7" />
             </svg>
-            <span style={{ fontWeight: 600 }}>Workflow Principle</span>
-          </div>
-          <p className="sidebar-footer-desc">
-            Convert conversations into confirmed commitments, approved tasks, and trackable outcomes.
-          </p>
+          </button>
+        )}
+
+        {/* One-Line Footer */}
+        <div className="sidebar-footer-oneline" title="Meet2Momentum Principle">
+          AI proposes. Humans approve.
         </div>
       </aside>
     </>
