@@ -2,80 +2,127 @@ import React from 'react';
 
 export default function MeetingHistory({ meetings, isLoading, error, onRefresh }) {
   return (
-    <div className="card">
-      <div className="card-header">
-        <div className="card-title-group">
-          <h2>Meeting History</h2>
-          <p>Persisted SQLite records ({meetings.length})</p>
+    <div className="panel-card" style={{ borderTop: '3px solid var(--color-teal)' }}>
+      <div className="panel-card-header">
+        <div className="panel-header-icon" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }} aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+            <line x1="8" y1="21" x2="16" y2="21"/>
+            <line x1="12" y1="17" x2="12" y2="21"/>
+          </svg>
         </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <h2 className="panel-title">Saved Meetings</h2>
+            <span className="count-pill">{meetings.length}</span>
+          </div>
+          <p className="panel-subtitle">Meeting records ready for review and outcome extraction</p>
+        </div>
+
         <button
           type="button"
-          className="btn btn-secondary btn-sm"
+          className="saas-btn saas-btn-secondary saas-btn-sm"
           onClick={onRefresh}
           disabled={isLoading}
-          title="Refresh history from SQLite database"
+          title="Refresh meeting list"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: isLoading ? 'spin 1s linear infinite' : 'none' }}>
+          <svg 
+            width="14" 
+            height="14" 
+            viewBox="0 0 24 24" 
+            fill="none" 
+            stroke="currentColor" 
+            strokeWidth="2" 
+            strokeLinecap="round" 
+            strokeLinejoin="round" 
+            className={isLoading ? 'spin-animation' : ''}
+          >
             <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
           </svg>
-          Refresh
+          <span>Refresh</span>
         </button>
       </div>
 
-      <div className="card-body">
+      <div className="panel-card-body">
+        {/* Error Alert */}
         {error && (
-          <div className="alert alert-error" role="alert">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/>
-              <line x1="12" y1="8" x2="12" y2="12"/>
-              <line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            <div>{error}</div>
+          <div className="saas-alert saas-alert-error" role="alert">
+            <div className="alert-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12.01" y2="16"/>
+              </svg>
+            </div>
+            <div className="alert-content">
+              <strong>Could not load meetings:</strong> {error}
+            </div>
           </div>
         )}
 
+        {/* Loading State */}
         {isLoading && meetings.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1.2s linear infinite' }}>
+          <div className="saas-empty-state">
+            <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="spin-animation">
                 <path d="M21 12a9 9 0 1 1-6.219-8.56"/>
               </svg>
             </div>
-            <div className="empty-state-title">Connecting to SQLite...</div>
-            <div className="empty-state-text">Loading stored meeting records from backend.</div>
+            <h3 className="empty-state-title">Loading meetings...</h3>
+            <p className="empty-state-desc">Fetching recorded meetings from your workspace.</p>
           </div>
         ) : meetings.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                <line x1="8" y1="21" x2="16" y2="21"/>
-                <line x1="12" y1="17" x2="12" y2="21"/>
+          /* Empty State */
+          <div className="saas-empty-state">
+            <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="12" y1="18" x2="12" y2="12"/>
+                <line x1="9" y1="15" x2="15" y2="15"/>
               </svg>
             </div>
-            <div className="empty-state-title">No Saved Meetings Yet</div>
-            <div className="empty-state-text">
-              Upload a .txt transcript or paste meeting notes on the left to create your first persistent record.
-            </div>
+            <h3 className="empty-state-title">No Meetings Added Yet</h3>
+            <p className="empty-state-desc">
+              Paste your meeting notes or upload a .txt file on the left to add your first meeting.
+            </p>
           </div>
         ) : (
-          <div className="history-list">
+          /* Meeting Cards List */
+          <div className="meeting-cards-stream">
             {meetings.map((m) => (
-              <div key={m.meeting_id} className="history-item">
-                <div className="history-item-header">
-                  <div className="history-item-title">{m.title}</div>
+              <div key={m.meeting_id} className="meeting-record-card">
+                <div className="record-card-top">
+                  <div className="record-title-area">
+                    <h4 className="record-title">{m.title}</h4>
+                    <span className="record-id-badge">{m.meeting_id}</span>
+                  </div>
                   {m.meeting_date && (
-                    <span className="history-item-date">
-                      📅 {m.meeting_date}
+                    <span className="record-date-badge">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <rect x="3" y="4" width="18" height="18" rx="2" ry="2"/>
+                        <line x1="16" y1="2" x2="16" y2="6"/>
+                        <line x1="8" y1="2" x2="8" y2="6"/>
+                        <line x1="3" y1="10" x2="21" y2="10"/>
+                      </svg>
+                      {m.meeting_date}
                     </span>
                   )}
                 </div>
-                <p className="history-item-preview">
+
+                <p className="record-transcript-snippet">
                   {m.transcript}
                 </p>
-                <div className="history-item-footer">
-                  <span className="history-item-id">{m.meeting_id}</span>
-                  <span>{new Date(m.created_at).toLocaleString()}</span>
+
+                <div className="record-card-bottom">
+                  <span className="record-meta-time">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10"/>
+                      <polyline points="12 6 12 12 16 14"/>
+                    </svg>
+                    Added {new Date(m.created_at).toLocaleDateString()} at {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                  <span className="record-status-tag">Recorded</span>
                 </div>
               </div>
             ))}

@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import Sidebar from './components/Sidebar';
 import Header from './components/Header';
-import Navigation from './components/Navigation';
 import TranscriptWorkspace from './components/TranscriptWorkspace';
 import MeetingHistory from './components/MeetingHistory';
 import { checkBackendHealth, fetchMeetings } from './services/api';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('meetings');
+  const [activeTab, setActiveTab] = useState('overview');
   const [isConnected, setIsConnected] = useState(false);
   const [isCheckingHealth, setIsCheckingHealth] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   const [meetings, setMeetings] = useState([]);
   const [isLoadingMeetings, setIsLoadingMeetings] = useState(false);
   const [meetingsError, setMeetingsError] = useState('');
 
-  // Check health and load meetings
+  // Backend sync
   const loadMeetingsData = useCallback(async () => {
     setIsLoadingMeetings(true);
     setMeetingsError('');
@@ -23,7 +24,7 @@ export default function App() {
       setMeetings(data);
       setIsConnected(true);
     } catch (err) {
-      setMeetingsError(err.message || 'Unable to load meeting history.');
+      setMeetingsError(err.message || 'Unable to load meeting records.');
       setIsConnected(false);
     } finally {
       setIsLoadingMeetings(false);
@@ -32,7 +33,6 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Initial health check
     checkBackendHealth()
       .then(() => {
         setIsConnected(true);
@@ -49,129 +49,386 @@ export default function App() {
   };
 
   return (
-    <div className="app-container">
-      <Header isConnected={isConnected} isChecking={isCheckingHealth} />
-      <Navigation
+    <div className="saas-app-layout">
+      {/* Colorful Light Sidebar */}
+      <Sidebar
         activeTab={activeTab}
         onSelectTab={setActiveTab}
         meetingCount={meetings.length}
+        isOpen={isSidebarOpen}
+        onClose={() => setIsSidebarOpen(false)}
       />
 
-      <main className="main-wrapper">
-        {/* Core Principles Banner */}
-        <div className="notice-banner">
-          <div className="notice-text">
-            <strong>Core Principle:</strong> AI proposes. Humans approve. The system enforces.
-          </div>
-          <span className="notice-tag">Phase 1 Foundation Active</span>
-        </div>
+      {/* Main Viewport */}
+      <div className="saas-main-viewport">
+        <Header
+          activeTab={activeTab}
+          isConnected={isConnected}
+          isChecking={isCheckingHealth}
+          onOpenSidebar={() => setIsSidebarOpen(true)}
+          onNewMeetingClick={() => setActiveTab('meetings')}
+        />
 
-        {/* Tab 1: Meetings Workspace (Active in Phase 1) */}
-        {activeTab === 'meetings' && (
-          <div className="grid-two-column">
-            <TranscriptWorkspace onMeetingSaved={handleMeetingSaved} />
-            <MeetingHistory
-              meetings={meetings}
-              isLoading={isLoadingMeetings}
-              error={meetingsError}
-              onRefresh={loadMeetingsData}
-            />
-          </div>
-        )}
-
-        {/* Tab 2: Overview & Architecture */}
-        {activeTab === 'overview' && (
-          <div className="card">
-            <div className="card-header">
-              <div className="card-title-group">
-                <h2>Meet2Momentum — System Architecture & Phased Blueprint</h2>
-                <p>HACKNOVA'26 Problem Statement 4 Specification Reference</p>
-              </div>
-            </div>
-            <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.25rem', marginBottom: '1.5rem' }}>
-                <div style={{ padding: '1rem', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F8FAFC' }}>
-                  <div style={{ fontWeight: 600, color: '#1E40AF', marginBottom: '0.35rem' }}>1. Secure Ingestion & Parsing</div>
-                  <p style={{ fontSize: '0.8rem', color: '#475569' }}>
-                    Multi-modal meeting intake (.txt file uploads, direct text). Raw input is preserved without modification to anchor ground-truth evidence.
+        <main className="saas-page-content">
+          {/* TAB 1: OVERVIEW */}
+          {activeTab === 'overview' && (
+            <div className="overview-container">
+              {/* Product Hero Banner */}
+              <div className="overview-hero-card">
+                <div className="hero-content">
+                  <h2 className="hero-title">Meeting-to-Execution Workspace</h2>
+                  <p className="hero-desc">
+                    Capture meeting discussions, identify confirmed decisions, and turn commitments into trackable action items with human approval.
                   </p>
                 </div>
-                <div style={{ padding: '1rem', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F8FAFC' }}>
-                  <div style={{ fontWeight: 600, color: '#1E40AF', marginBottom: '0.35rem' }}>2. AI Extraction & Classification</div>
-                  <p style={{ fontSize: '0.8rem', color: '#475569' }}>
-                    Google Gemini API identifies decisions, action items, owners, deadlines. Strictly separates confirmed commitments from suggestions and open questions.
-                  </p>
-                </div>
-                <div style={{ padding: '1rem', border: '1px solid #E2E8F0', borderRadius: '8px', backgroundColor: '#F8FAFC' }}>
-                  <div style={{ fontWeight: 600, color: '#1E40AF', marginBottom: '0.35rem' }}>3. Commitment Firewall</div>
-                  <p style={{ fontSize: '0.8rem', color: '#475569' }}>
-                    Deterministic backend enforcement gate: no task enters external execution, export, or sync without explicit human approval.
-                  </p>
+                <div className="hero-action-box">
+                  <button
+                    type="button"
+                    className="saas-btn saas-btn-primary"
+                    onClick={() => setActiveTab('meetings')}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" />
+                      <line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    <span>Add Meeting Transcript</span>
+                  </button>
                 </div>
               </div>
 
-              <div style={{ padding: '1.25rem', backgroundColor: '#EFF6FF', borderRadius: '8px', border: '1px solid #BFDBFE' }}>
-                <h3 style={{ fontSize: '0.95rem', fontWeight: 600, color: '#1D4ED8', marginBottom: '0.5rem' }}>
-                  Current Phase Status: Phase 1 — Secure Foundation Complete
-                </h3>
-                <ul style={{ paddingLeft: '1.25rem', fontSize: '0.825rem', color: '#1E3A8A', lineHeight: 1.6 }}>
-                  <li><strong>Backend:</strong> FastAPI + SQLite tables initialized for meetings, decisions, and action items.</li>
-                  <li><strong>Validation:</strong> Pydantic schemas enforcing category definitions (<code>commitment</code>, <code>suggestion</code>, <code>unresolved_question</code>) and approval states.</li>
-                  <li><strong>Frontend:</strong> React + Vite using strict professional light theme (clean blue/slate palette, 0 dark-mode surfaces).</li>
-                  <li><strong>Persistence:</strong> Real-time SQLite persistence for meeting transcripts with immediate round-trip retrieval.</li>
-                  <li><strong>AI Scope:</strong> Google Gemini API extraction deferred to Phase 2 per strict specification boundaries.</li>
-                </ul>
+              {/* Meaningful Colored Metric Cards */}
+              <div className="metrics-grid">
+                <div className="metric-card theme-teal">
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-teal)' }}>TOTAL MEETINGS</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">{meetings.length}</div>
+                  <div className="metric-footer">Recorded in workspace</div>
+                </div>
+
+                <div className="metric-card theme-lavender">
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-lavender)' }}>DECISIONS</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-lavender)', color: 'var(--color-lavender)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 14 14" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">0</div>
+                  <div className="metric-footer">Awaiting meeting processing</div>
+                </div>
+
+                <div className="metric-card theme-green">
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-green)' }}>CONFIRMED COMMITMENTS</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 11 12 14 22 4" />
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">0</div>
+                  <div className="metric-footer">Awaiting meeting processing</div>
+                </div>
+
+                <div className="metric-card theme-amber">
+                  <div className="metric-header">
+                    <span className="metric-label" style={{ color: 'var(--color-amber)' }}>PENDING FOLLOW-UPS</span>
+                    <div className="metric-icon-box" style={{ backgroundColor: 'var(--bg-pale-amber)', color: 'var(--color-amber)' }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                        <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="metric-value">0</div>
+                  <div className="metric-footer">No overdue or open questions</div>
+                </div>
+              </div>
+
+              {/* Recent Meetings Table */}
+              <div className="panel-card" style={{ marginBottom: '1.5rem', borderTop: '3px solid var(--color-teal)' }}>
+                <div className="panel-card-header">
+                  <div className="panel-header-icon" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h3 className="panel-title">Recent Meetings</h3>
+                    <p className="panel-subtitle">Latest transcripts and notes added to the workspace</p>
+                  </div>
+                  {meetings.length > 0 && (
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-secondary saas-btn-sm"
+                      onClick={() => setActiveTab('meetings')}
+                    >
+                      View All Meetings &rarr;
+                    </button>
+                  )}
+                </div>
+
+                <div className="panel-card-body">
+                  {meetings.length === 0 ? (
+                    <div className="saas-empty-state">
+                      <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-teal)', color: 'var(--color-teal)' }}>
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="2" y="3" width="20" height="14" rx="2" ry="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                      </div>
+                      <h4 className="empty-state-title">No Meetings Added Yet</h4>
+                      <p className="empty-state-desc">
+                        Add your first meeting transcript or notes to view records and begin tracking outcomes.
+                      </p>
+                      <button
+                        type="button"
+                        className="saas-btn saas-btn-primary saas-btn-sm"
+                        style={{ marginTop: '0.85rem' }}
+                        onClick={() => setActiveTab('meetings')}
+                      >
+                        Add Meeting Transcript
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="recent-meetings-table-wrapper">
+                      <table className="saas-table">
+                        <thead>
+                          <tr>
+                            <th>Meeting Title</th>
+                            <th>Reference</th>
+                            <th>Meeting Date</th>
+                            <th>Status</th>
+                            <th>Date Added</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {meetings.slice(0, 5).map((m) => (
+                            <tr key={m.meeting_id}>
+                              <td style={{ fontWeight: 600, color: 'var(--text-main)' }}>{m.title}</td>
+                              <td><code className="id-code-pill">{m.meeting_id}</code></td>
+                              <td>{m.meeting_date || '—'}</td>
+                              <td><span className="status-badge-recorded">Recorded</span></td>
+                              <td>{new Date(m.created_at).toLocaleDateString()}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Workflow Banner with Meaningful Color Accents */}
+              <div className="overview-workflow-banner">
+                <div className="workflow-banner-title">How Meet2Momentum Works</div>
+                <div className="workflow-steps-row">
+                  <div className="workflow-step-item">
+                    <div className="step-circle circle-teal">1</div>
+                    <div className="step-label">Add Transcript</div>
+                    <div className="step-sublabel">Paste notes or upload .txt</div>
+                  </div>
+                  <div className="workflow-step-divider">&rarr;</div>
+                  <div className="workflow-step-item">
+                    <div className="step-circle circle-lavender">2</div>
+                    <div className="step-label">Extract Outcomes</div>
+                    <div className="step-sublabel">Decisions & commitments</div>
+                  </div>
+                  <div className="workflow-step-divider">&rarr;</div>
+                  <div className="workflow-step-item">
+                    <div className="step-circle circle-blue">3</div>
+                    <div className="step-label">Review & Approve</div>
+                    <div className="step-sublabel">Confirm owners & dates</div>
+                  </div>
+                  <div className="workflow-step-divider">&rarr;</div>
+                  <div className="workflow-step-item">
+                    <div className="step-circle circle-amber">4</div>
+                    <div className="step-label">Track Follow-ups</div>
+                    <div className="step-sublabel">Monitor execution</div>
+                  </div>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab 3: Action Items (Deferred to Phase 2) */}
-        {activeTab === 'actions' && (
-          <div className="coming-soon-card">
-            <span className="coming-soon-phase">Phase 2 Deliverable</span>
-            <h2 className="coming-soon-title" style={{ marginTop: '0.85rem' }}>Action Items & Commitment Classifier</h2>
-            <p className="coming-soon-desc">
-              Automatic extraction of action items, owners, deadlines, and classification into 
-              <strong> Confirmed Commitments</strong>, <strong>Suggestions</strong>, and <strong>Unresolved Questions</strong> will be introduced in Phase 2 via Google Gemini API.
-            </p>
-            <div style={{ display: 'inline-flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <span style={{ fontSize: '0.75rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 500 }}>
-                ✓ Database Schema Initialized
-              </span>
-              <span style={{ fontSize: '0.75rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 500 }}>
-                ✓ Pydantic Domain Validation Ready
-              </span>
-              <span style={{ fontSize: '0.75rem', backgroundColor: '#FEF3C7', color: '#B45309', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 500 }}>
-                ⏳ Awaiting Phase 2 AI Extractor
-              </span>
+          {/* TAB 2: MEETINGS */}
+          {activeTab === 'meetings' && (
+            <div className="meetings-workspace-grid">
+              <TranscriptWorkspace onMeetingSaved={handleMeetingSaved} />
+              <MeetingHistory
+                meetings={meetings}
+                isLoading={isLoadingMeetings}
+                error={meetingsError}
+                onRefresh={loadMeetingsData}
+              />
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Tab 4: Decisions (Deferred to Phase 2) */}
-        {activeTab === 'decisions' && (
-          <div className="coming-soon-card">
-            <span className="coming-soon-phase">Phase 2 Deliverable</span>
-            <h2 className="coming-soon-title" style={{ marginTop: '0.85rem' }}>Decisions & Evidence Verification</h2>
-            <p className="coming-soon-desc">
-              Extracted meeting decisions with exact citation sentences linked to raw transcript evidence will populate here following Phase 2 implementation.
-            </p>
-            <div style={{ display: 'inline-flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <span style={{ fontSize: '0.75rem', backgroundColor: '#DCFCE7', color: '#15803D', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 500 }}>
-                ✓ SQLite Decisions Table Ready
-              </span>
-              <span style={{ fontSize: '0.75rem', backgroundColor: '#FEF3C7', color: '#B45309', padding: '0.25rem 0.5rem', borderRadius: '4px', fontWeight: 500 }}>
-                ⏳ Awaiting Phase 2 Decision Extractor
-              </span>
+          {/* TAB 3: DECISIONS */}
+          {activeTab === 'decisions' && (
+            <div className="feature-workspace-container">
+              <div className="panel-card" style={{ borderTop: '3px solid var(--color-lavender)' }}>
+                <div className="panel-card-header">
+                  <div className="panel-header-icon" style={{ backgroundColor: 'var(--bg-pale-lavender)', color: 'var(--color-lavender)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 14 14" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h2 className="panel-title">Decisions Log</h2>
+                    <p className="panel-subtitle">Agreed decisions supported by verbatim evidence from meeting transcripts</p>
+                  </div>
+                </div>
+                <div className="panel-card-body">
+                  <div className="saas-empty-state">
+                    <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-lavender)', color: 'var(--color-lavender)' }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="12" y1="8" x2="12" y2="12" />
+                        <line x1="12" y1="16" x2="12.01" y2="16" />
+                      </svg>
+                    </div>
+                    <h3 className="empty-state-title">No Decisions Recorded Yet</h3>
+                    <p className="empty-state-desc">
+                      Confirmed decisions will be extracted from meeting transcripts and linked to the exact sentences where they were agreed.
+                    </p>
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-primary saas-btn-sm"
+                      style={{ marginTop: '1rem' }}
+                      onClick={() => setActiveTab('meetings')}
+                    >
+                      Go to Meetings Workspace
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        )}
-      </main>
+          )}
 
-      <footer className="app-footer">
-        <div>Meet2Momentum &bull; HACKNOVA'26 Problem Statement 4 &bull; AI Proposes &bull; Humans Approve &bull; The System Enforces</div>
-      </footer>
+          {/* TAB 4: ACTION ITEMS */}
+          {activeTab === 'actions' && (
+            <div className="feature-workspace-container">
+              <div className="panel-card" style={{ borderTop: '3px solid var(--color-green)' }}>
+                <div className="panel-card-header">
+                  <div className="panel-header-icon" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="9 11 12 14 22 4" />
+                      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h2 className="panel-title">Action Items & Commitments</h2>
+                    <p className="panel-subtitle">Categorized tasks with assigned owners, deadlines, and approval controls</p>
+                  </div>
+                </div>
+                <div className="panel-card-body">
+                  {/* Category Guide Cards with Meaningful Colors */}
+                  <div className="categories-guide-grid">
+                    <div className="category-guide-card guide-commitment">
+                      <span className="category-dot green" />
+                      <div>
+                        <strong>Confirmed Commitments</strong>
+                        <p>Tasks explicitly agreed upon during the discussion</p>
+                      </div>
+                    </div>
+                    <div className="category-guide-card guide-suggestion">
+                      <span className="category-dot peach" />
+                      <div>
+                        <strong>Suggestions & Ideas</strong>
+                        <p>Proposed actions that require team agreement</p>
+                      </div>
+                    </div>
+                    <div className="category-guide-card guide-unresolved">
+                      <span className="category-dot amber" />
+                      <div>
+                        <strong>Unresolved Questions</strong>
+                        <p>Open questions needing owner or deadline clarification</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="saas-empty-state">
+                    <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-mint)', color: 'var(--color-green)' }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="9 11 12 14 22 4" />
+                        <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+                      </svg>
+                    </div>
+                    <h3 className="empty-state-title">No Action Items Extracted Yet</h3>
+                    <p className="empty-state-desc">
+                      Add a meeting transcript to extract tasks, assign owners, verify deadlines, and approve execution.
+                    </p>
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-primary saas-btn-sm"
+                      style={{ marginTop: '1rem' }}
+                      onClick={() => setActiveTab('meetings')}
+                    >
+                      Add Meeting Transcript
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 5: FOLLOW-UPS */}
+          {activeTab === 'followups' && (
+            <div className="feature-workspace-container">
+              <div className="panel-card" style={{ borderTop: '3px solid var(--color-amber)' }}>
+                <div className="panel-card-header">
+                  <div className="panel-header-icon" style={{ backgroundColor: 'var(--bg-pale-amber)', color: 'var(--color-amber)' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                      <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                    </svg>
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <h2 className="panel-title">Follow-up Tracking</h2>
+                    <p className="panel-subtitle">Monitor pending questions, unassigned tasks, and upcoming due dates</p>
+                  </div>
+                </div>
+                <div className="panel-card-body">
+                  <div className="saas-empty-state">
+                    <div className="empty-state-icon-box" style={{ backgroundColor: 'var(--bg-pale-amber)', color: 'var(--color-amber)' }}>
+                      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 14 14" />
+                      </svg>
+                    </div>
+                    <h3 className="empty-state-title">No Pending Follow-ups</h3>
+                    <p className="empty-state-desc">
+                      Items requiring clarification, missing owners, or upcoming deadlines will appear here to ensure accountability.
+                    </p>
+                    <button
+                      type="button"
+                      className="saas-btn saas-btn-primary saas-btn-sm"
+                      style={{ marginTop: '1rem' }}
+                      onClick={() => setActiveTab('meetings')}
+                    >
+                      Go to Meetings Workspace
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </main>
+      </div>
     </div>
   );
 }
