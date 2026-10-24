@@ -27,7 +27,10 @@ app = FastAPI(
 # Narrow CORS configuration for authorized frontend origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=FRONTEND_ORIGINS,
+    allow_origins=[
+        *FRONTEND_ORIGINS,
+        "https://meet2momentum.onrender.com",
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
